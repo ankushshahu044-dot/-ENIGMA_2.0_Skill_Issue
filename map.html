@@ -262,8 +262,8 @@
 <!-- Map -->
 <div id="map"></div>
 
-<!-- Header HUD (hidden when embedded) -->
-<div id="hud-header">
+<!-- Header HUD (hidden by default, shown by JS when standalone) -->
+<div id="hud-header" style="display:none">
   <div class="brand">
     <div class="brand-icon">🫁</div>
     <div>
@@ -275,26 +275,26 @@
 </div>
 
 <!-- Layer Toggle -->
-<div id="layer-toggle">
+<div id="layer-toggle" style="display:none">
   <button class="layer-btn active" id="btn-dark" onclick="setLayer('dark')">🌑 Dark</button>
   <button class="layer-btn" id="btn-satellite" onclick="setLayer('satellite')">🛰 Satellite</button>
 </div>
 
 <!-- Theme toggle -->
-<div id="theme-toggle" onclick="toggleTheme()" title="Toggle Light / Dark Mode">
+<div id="theme-toggle" style="display:none" onclick="toggleTheme()" title="Toggle Light / Dark Mode">
   <span id="theme-icon">☀️</span>
   <span id="theme-label">LIGHT</span>
 </div>
 
 <!-- AQI Panel -->
-<div id="aqi-panel">
+<div id="aqi-panel" style="display:none">
   <div class="label">YOUR AQI</div>
   <div class="value" id="aqi-value">—</div>
   <div class="status" id="aqi-status">LOADING...</div>
 </div>
 
 <!-- Legend -->
-<div id="legend">
+<div id="legend" style="display:none">
   <h3>Map Legend</h3>
   <div class="legend-item"><div class="leg-dot blue"></div> Your Location</div>
   <div class="legend-item"><div class="leg-dot red"></div> High AQI Zone (500m)</div>
@@ -303,7 +303,7 @@
 </div>
 
 <!-- Safe Zone Card -->
-<div id="safe-zone-card">
+<div id="safe-zone-card" style="display:none">
   <div class="szc-icon">🌿</div>
   <div class="szc-block">
     <div class="szc-label">RECOMMENDED · AQI ≤ 80</div>
@@ -323,8 +323,8 @@
   </div>
 </div>
 
-<!-- Status bar (hidden when embedded) -->
-<div id="status-bar">
+<!-- Status bar (hidden by default) -->
+<div id="status-bar" style="display:none">
   <span class="status-dot"></span>LIVE · GPS ACTIVE
 </div>
 
@@ -334,16 +334,14 @@
 <script>
   // ── Detect if running inside an iframe ──────────────────────────────────────
   const IS_EMBEDDED = window.self !== window.top;
-  if (IS_EMBEDDED) {
-    document.body.classList.add('embedded');
-    // Force-hide immediately via JS so there's zero flash before CSS loads
-    const HIDE_IDS = ['hud-header','status-bar','aqi-panel','layer-toggle','theme-toggle','legend','safe-zone-card'];
-    HIDE_IDS.forEach(id => {
-      const el = document.getElementById(id);
-      if (el) el.style.display = 'none';
-    });
-    // Disable zoom controls clutter in minimap
-    // (map object not created yet — handled after map init)
+
+  if (!IS_EMBEDDED) {
+    // Standalone — show all HUD panels
+    ['hud-header','layer-toggle','theme-toggle','aqi-panel','legend','status-bar']
+      .forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.style.display = '';
+      });
   }
 
   // ── postMessage bridge: send data to parent (index.html) ──────────────────
@@ -745,7 +743,11 @@
       if (parkNameEl) parkNameEl.textContent = park.name;
       if (distEl)     distEl.textContent     = fmt.value;
       updateSafeZoneCard(park.aqi);
-      setTimeout(() => document.getElementById('safe-zone-card').classList.add('visible'), 500);
+      const card = document.getElementById('safe-zone-card');
+      if (card) {
+        card.style.display = '';
+        setTimeout(() => card.classList.add('visible'), 500);
+      }
     }
 
     L.polyline([[lat, lng], [park.lat, park.lng]], { color: '#ffe944', weight: 2.5, opacity: 0.85, dashArray: '10 8', lineCap: 'round' }).addTo(map);
