@@ -3,11 +3,11 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>OxyTrace · Login</title>
+  <title>OxyTrace · Secure Access</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=IBM+Plex+Mono:wght@300;400;500&display=swap" rel="stylesheet">
   <style>
-    :root { --neon-blue:#00d4ff; --neon-green:#00ff88; --bg-dark:#070b0f; --card-bg:#0d1520; }
+    :root { --neon-blue:#00d4ff; --neon-green:#00ff88; --bg-dark:#070b0f; }
     *, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
     .font-orbitron { font-family:'Orbitron',sans-serif; }
     body {
@@ -16,6 +16,8 @@
       min-height:100vh; overflow:hidden;
       display:flex; align-items:center; justify-content:center;
     }
+    
+    /* ── Background FX ── */
     body::before {
       content:''; position:fixed; inset:0;
       background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.07) 2px,rgba(0,0,0,.07) 4px);
@@ -30,22 +32,12 @@
         linear-gradient(90deg,rgba(0,212,255,.025) 1px,transparent 1px);
       background-size:100% 100%,100% 100%,32px 32px,32px 32px;
     }
-    .particles { position:fixed; inset:0; z-index:1; pointer-events:none; overflow:hidden; }
-    .particle {
-      position:absolute; width:2px; height:2px; border-radius:50%;
-      background:var(--neon-blue); opacity:0;
-      animation:float-up linear infinite;
-    }
-    @keyframes float-up {
-      0%   { opacity:0; transform:translateY(100vh) translateX(0); }
-      10%  { opacity:.5; }
-      90%  { opacity:.2; }
-      100% { opacity:0; transform:translateY(-80px) translateX(var(--d,20px)); }
-    }
     .beam { position:fixed; top:0; bottom:0; width:1px; z-index:2; opacity:.15; }
-    .beam-l { left:0;  background:linear-gradient(180deg,transparent,var(--neon-blue) 40%,var(--neon-green) 60%,transparent); animation:bpulse 6s ease-in-out infinite alternate; }
+    .beam-l { left:0; background:linear-gradient(180deg,transparent,var(--neon-blue) 40%,var(--neon-green) 60%,transparent); animation:bpulse 6s ease-in-out infinite alternate; }
     .beam-r { right:0; background:linear-gradient(180deg,transparent,var(--neon-green) 40%,var(--neon-blue) 60%,transparent); animation:bpulse 8s ease-in-out infinite alternate-reverse; }
     @keyframes bpulse { from{opacity:.08;} to{opacity:.25;} }
+
+    /* ── System Bar ── */
     .sys-bar {
       position:fixed; top:0; left:0; right:0; z-index:20;
       padding:5px 20px; display:flex; align-items:center; justify-content:space-between;
@@ -53,6 +45,8 @@
       background:rgba(7,11,15,.75); backdrop-filter:blur(10px);
       font-size:9px; opacity:.4; letter-spacing:.1em;
     }
+
+    /* ── Login Card ── */
     .login-card {
       position:relative; z-index:10;
       width:100%; max-width:380px;
@@ -64,66 +58,62 @@
       animation:card-enter .8s cubic-bezier(.22,1,.36,1) both;
     }
     @keyframes card-enter { from{opacity:0;transform:translateY(28px) scale(.97);} to{opacity:1;transform:none;} }
+
+    /* ── Tech Corners ── */
     .corner { position:absolute; width:16px; height:16px; }
     .c-tl{top:-1px;left:-1px;border-top:2px solid var(--neon-blue);border-left:2px solid var(--neon-blue);border-radius:4px 0 0 0;}
     .c-tr{top:-1px;right:-1px;border-top:2px solid var(--neon-blue);border-right:2px solid var(--neon-blue);border-radius:0 4px 0 0;}
     .c-bl{bottom:-1px;left:-1px;border-bottom:2px solid var(--neon-green);border-left:2px solid var(--neon-green);border-radius:0 0 0 4px;}
     .c-br{bottom:-1px;right:-1px;border-bottom:2px solid var(--neon-green);border-right:2px solid var(--neon-green);border-radius:0 0 4px 0;}
+
+    /* ── Glow Text ── */
     .glow-blue { text-shadow:0 0 10px var(--neon-blue),0 0 28px rgba(0,212,255,.4); }
     .glow-green { text-shadow:0 0 10px var(--neon-green),0 0 28px rgba(0,255,136,.4); }
-    @keyframes logo-in { from{opacity:0;transform:scale(.75) translateY(-8px);} to{opacity:1;transform:none;} }
-    .logo-wrap { animation:logo-in .7s cubic-bezier(.34,1.56,.64,1) .2s both; }
-    .field-wrap { position:relative; margin-bottom:16px; animation:field-in .5s ease both; }
-    .field-wrap:nth-child(1){animation-delay:.35s;} .field-wrap:nth-child(2){animation-delay:.43s;}
-    @keyframes field-in { from{opacity:0;transform:translateX(-10px);} to{opacity:1;transform:none;} }
+
+    /* ── Form Elements ── */
+    .field-wrap { position:relative; margin-bottom:16px; }
     .flabel { display:block; font-size:9px; letter-spacing:.14em; color:rgba(0,212,255,.55); margin-bottom:5px; font-family:'Orbitron',sans-serif; }
     .finput {
       width:100%; background:rgba(0,212,255,.03); border:1px solid rgba(0,212,255,.14);
       border-radius:10px; padding:11px 13px; color:#e0f4ff;
       font-family:'IBM Plex Mono',monospace; font-size:13px;
-      transition:border-color .25s,box-shadow .25s,background .25s; outline:none;
+      transition:all .25s; outline:none;
     }
-    .finput::placeholder { color:rgba(0,212,255,.18); }
-    .finput:focus { border-color:var(--neon-blue); background:rgba(0,212,255,.05); box-shadow:0 0 0 3px rgba(0,212,255,.07),0 0 14px rgba(0,212,255,.09); }
-    .fline { height:1px; width:0; background:var(--neon-blue); transition:width .3s ease; margin-top:3px; border-radius:999px; }
-    .finput:focus ~ .fline { width:100%; }
-    .pw-eye { position:absolute; right:12px; top:31px; font-size:9px; letter-spacing:.06em; color:rgba(0,212,255,.35); cursor:pointer; transition:color .2s; }
-    .pw-eye:hover { color:var(--neon-blue); }
+    .finput:focus { border-color:var(--neon-blue); background:rgba(0,212,255,.05); box-shadow:0 0 0 3px rgba(0,212,255,.07); }
+    
+    /* ── Buttons ── */
     .btn-auth {
       width:100%; background:linear-gradient(135deg,rgba(0,212,255,.13),rgba(0,255,136,.08));
       border:1px solid rgba(0,212,255,.32); border-radius:12px; padding:13px;
       color:var(--neon-blue); font-family:'Orbitron',sans-serif; font-size:12px; font-weight:700; letter-spacing:.18em;
       cursor:pointer; transition:all .25s; position:relative; overflow:hidden;
-      animation:field-in .5s ease .52s both;
     }
-    .btn-auth:hover { transform:translateY(-2px); box-shadow:0 8px 24px rgba(0,212,255,.18),0 0 0 1px rgba(0,212,255,.38); }
-    .btn-auth:active { transform:translateY(0) scale(.98); }
+    .btn-auth:hover { transform:translateY(-2px); box-shadow:0 8px 24px rgba(0,212,255,.18); }
+    
+    /* Loading Spinner */
     @keyframes spin { to{transform:rotate(360deg);} }
-    .btn-loading { pointer-events:none; }
     .btn-loading .btxt { opacity:0; }
-    .btn-loading::after { content:''; position:absolute; top:50%; left:50%; width:15px; height:15px; margin:-7.5px 0 0 -7.5px; border:2px solid rgba(0,212,255,.25); border-top-color:var(--neon-blue); border-radius:50%; animation:spin .7s linear infinite; }
+    .btn-loading::after { content:''; position:absolute; top:50%; left:50%; width:16px; height:16px; margin:-8px; border:2px solid rgba(0,212,255,.3); border-top-color:var(--neon-blue); border-radius:50%; animation:spin .7s linear infinite; }
+
+    /* ── Tabs ── */
     .tabs { display:flex; margin-bottom:22px; border-radius:12px; overflow:hidden; background:rgba(0,212,255,.05); border:1px solid rgba(0,212,255,.1); }
-    .tab-btn { flex:1; padding:8px 0; font-family:'Orbitron',sans-serif; font-size:10px; letter-spacing:.1em; border:none; cursor:pointer; transition:background .2s,color .2s; }
+    .tab-btn { flex:1; padding:8px 0; font-family:'Orbitron',sans-serif; font-size:10px; letter-spacing:.1em; border:none; cursor:pointer; transition:all .2s; }
     .tab-btn.active { background:rgba(0,212,255,.12); color:var(--neon-blue); }
     .tab-btn:not(.active) { background:transparent; color:rgba(224,244,255,.28); }
-    .divider { display:flex; align-items:center; gap:10px; margin:16px 0; animation:field-in .5s ease .5s both; }
+
+    /* ── Divider ── */
+    .divider { display:flex; align-items:center; gap:10px; margin:16px 0; }
     .div-line { flex:1; height:1px; background:rgba(255,255,255,.06); }
     .div-txt { font-size:9px; opacity:.28; letter-spacing:.1em; }
+
+    /* ── Google Btn ── */
     .btn-google {
       width:100%; background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.08);
       border-radius:12px; padding:10px; color:rgba(224,244,255,.45);
       font-family:'IBM Plex Mono',monospace; font-size:11px; cursor:pointer;
-      transition:border-color .2s,background .2s,color .2s;
-      display:flex; align-items:center; justify-content:center; gap:8px;
-      animation:field-in .5s ease .58s both;
+      transition:all .2s; display:flex; align-items:center; justify-content:center; gap:8px;
     }
     .btn-google:hover { border-color:rgba(0,212,255,.25); background:rgba(0,212,255,.04); color:rgba(224,244,255,.75); }
-    .status-line { display:flex; align-items:center; justify-content:center; gap:6px; margin-top:22px; font-size:8px; opacity:.28; letter-spacing:.1em; animation:field-in .5s ease .65s both; }
-    .sdot { width:5px; height:5px; border-radius:50%; background:var(--neon-green); animation:sdp 2s infinite; }
-    @keyframes sdp { 0%,100%{opacity:1;} 50%{opacity:.3;} }
-    .pw-strength-bar { height:3px; width:0; border-radius:999px; transition:width .3s,background .3s; }
-    @keyframes shake { 0%,100%{transform:translateX(0);} 25%{transform:translateX(-5px);} 75%{transform:translateX(5px);} }
-    .do-shake { animation:shake .35s ease; }
   </style>
 </head>
 <body>
@@ -137,82 +127,60 @@
 <div class="bg-grid"></div>
 <div class="beam beam-l"></div>
 <div class="beam beam-r"></div>
-<div class="particles" id="ptc"></div>
 
-<div class="login-card" style="margin-top:18px;">
+<div class="login-card">
   <div class="corner c-tl"></div><div class="corner c-tr"></div>
   <div class="corner c-bl"></div><div class="corner c-br"></div>
 
-  <!-- Logo -->
-  <div class="logo-wrap text-center mb-7">
-    <svg viewBox="0 0 48 48" fill="none" class="w-11 h-11 mx-auto mb-3">
-      <circle cx="24" cy="24" r="22" stroke="#00d4ff" stroke-width="1.5" opacity=".25"/>
-      <circle cx="24" cy="24" r="22" stroke="#00d4ff" stroke-width="1" stroke-dasharray="4 7" opacity=".12"/>
-      <path d="M15 30C15 30 15 15 24 15C33 15 33 30 33 30" stroke="#00d4ff" stroke-width="2.5" stroke-linecap="round" fill="none"/>
-      <path d="M19 30C19 30 19 20 24 20C29 20 29 30 29 30" stroke="#00ff88" stroke-width="2.5" stroke-linecap="round" fill="none"/>
-      <circle cx="24" cy="15" r="2.5" fill="#00d4ff" opacity=".9"/>
-      <circle cx="24" cy="15" r="5.5" stroke="#00d4ff" stroke-width=".8" opacity=".2"/>
-    </svg>
+  <div class="text-center mb-7">
+    <div class="w-12 h-12 mx-auto mb-3 flex items-center justify-center rounded-xl border border-cyan-500/20 bg-cyan-900/10 backdrop-blur-md">
+      <svg viewBox="0 0 32 32" fill="none" class="w-7 h-7">
+        <path d="M16 28C16 28 4 20 4 12C4 7 8 4 12 4C14 4 15 5 16 6C17 5 18 4 20 4C24 4 28 7 28 12C28 20 16 28 16 28Z" stroke="#00d4ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M16 6V12" stroke="#00ff88" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+    </div>
     <h1 class="font-orbitron font-black text-2xl tracking-widest glow-blue" style="color:var(--neon-blue)">OXY<span style="color:var(--neon-green)" class="glow-green">TRACE</span></h1>
-    <p class="font-orbitron mt-1" style="font-size:8px;letter-spacing:.22em;opacity:.32;">LUNG HEALTH INTELLIGENCE</p>
+    <p class="font-orbitron mt-1" style="font-size:8px;letter-spacing:.22em;opacity:.32;">RESPIRATORY INTELLIGENCE</p>
   </div>
 
-  <!-- Tabs -->
   <div class="tabs">
     <button class="tab-btn active" id="t-login" onclick="swTab('login')">LOGIN</button>
     <button class="tab-btn" id="t-reg" onclick="swTab('reg')">REGISTER</button>
   </div>
 
-  <!-- Login form -->
   <div id="f-login">
     <div class="field-wrap">
-      <label class="flabel">EMAIL ADDRESS</label>
-      <input type="email" id="l-email" class="finput" placeholder="user@domain.com">
-      <div class="fline"></div>
+      <label class="flabel">EMAIL ID</label>
+      <input type="email" class="finput" placeholder="user@oxytrace.io">
     </div>
     <div class="field-wrap">
       <label class="flabel">PASSWORD</label>
-      <input type="password" id="l-pass" class="finput" placeholder="••••••••">
-      <div class="fline"></div>
-      <span class="pw-eye" onclick="togglePw('l-pass',this)">SHOW</span>
+      <input type="password" class="finput" placeholder="••••••••">
     </div>
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;font-size:10px;">
-      <label style="display:flex;align-items:center;gap:5px;cursor:pointer;opacity:.45;"><input type="checkbox" style="accent-color:var(--neon-blue);"> Remember me</label>
-      <a href="#" style="color:rgba(0,212,255,.45);text-decoration:none;font-size:10px;" onmouseover="this.style.color='var(--neon-blue)'" onmouseout="this.style.color='rgba(0,212,255,.45)'">Forgot access?</a>
-    </div>
-    <button class="btn-auth" id="btn-login" onclick="doLogin(this)"><span class="btxt">AUTHENTICATE →</span></button>
+    <button class="btn-auth" onclick="doLogin(this)"><span class="btxt">AUTHENTICATE →</span></button>
   </div>
 
-  <!-- Register form -->
   <div id="f-reg" style="display:none;">
     <div class="field-wrap">
       <label class="flabel">EMAIL ADDRESS</label>
-      <input type="email" id="r-email" class="finput" placeholder="user@domain.com">
-      <div class="fline"></div>
+      <input type="email" class="finput" placeholder="user@oxytrace.io">
     </div>
     <div class="field-wrap">
       <label class="flabel">CREATE PASSWORD</label>
-      <input type="password" id="r-pass" class="finput" placeholder="Min. 8 characters" oninput="checkStrength(this.value)">
-      <div class="fline"></div>
-      <span class="pw-eye" onclick="togglePw('r-pass',this)">SHOW</span>
-    </div>
-    <div style="margin-top:-10px;margin-bottom:14px;">
-      <div style="height:3px;background:rgba(255,255,255,.05);border-radius:999px;overflow:hidden;"><div id="sw-bar" class="pw-strength-bar"></div></div>
-      <span id="sw-lbl" style="font-size:9px;letter-spacing:.1em;"></span>
+      <input type="password" class="finput" placeholder="Min. 8 characters">
     </div>
     <button class="btn-auth" onclick="doRegister(this)"><span class="btxt">CREATE IDENTITY →</span></button>
   </div>
 
-  <div class="divider"><div class="div-line"></div><span class="div-txt">OR CONTINUE WITH</span><div class="div-line"></div></div>
+  <div class="divider"><div class="div-line"></div><span class="div-txt">OR ACCESS VIA</span><div class="div-line"></div></div>
 
-  <button class="btn-google" onclick="googleLogin()">
+  <button class="btn-google" onclick="doRegister(this)">
     <svg width="16" height="16" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
     Continue with Google
   </button>
 
-  <div class="status-line">
-    <div class="sdot"></div>
-    <span class="font-orbitron" style="font-size:8px;">SECURE · ENCRYPTED · GDPR COMPLIANT</span>
+  <div class="text-center mt-5">
+    <span class="font-orbitron" style="font-size:8px;opacity:.3;">SECURE · ENCRYPTED · GDPR COMPLIANT</span>
   </div>
 </div>
 
@@ -221,53 +189,41 @@
 const clk = document.getElementById('sys-clock');
 setInterval(() => clk.textContent = new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}), 1000);
 
-// Particles
-const pc = document.getElementById('ptc');
-for (let i=0;i<20;i++) {
-  const p = document.createElement('div'); p.className='particle';
-  const col = Math.random()>.6 ? 'var(--neon-green)' : 'var(--neon-blue)';
-  p.style.cssText=`left:${Math.random()*100}%;width:${Math.random()>.7?3:2}px;height:${Math.random()>.7?3:2}px;animation-duration:${9+Math.random()*12}s;animation-delay:${Math.random()*18}s;--d:${(Math.random()-.5)*80}px;background:${col};`;
-  pc.appendChild(p);
-}
-
+// Tab Switcher
 function swTab(t) {
-  const isL = t==='login';
-  document.getElementById('f-login').style.display = isL?'block':'none';
-  document.getElementById('f-reg').style.display   = isL?'none':'block';
-  document.getElementById('t-login').className = 'tab-btn'+(isL?' active':'');
-  document.getElementById('t-reg').className   = 'tab-btn'+(!isL?' active':'');
+  const isL = t === 'login';
+  document.getElementById('f-login').style.display = isL ? 'block' : 'none';
+  document.getElementById('f-reg').style.display   = isL ? 'none' : 'block';
+  document.getElementById('t-login').className = 'tab-btn' + (isL ? ' active' : '');
+  document.getElementById('t-reg').className   = 'tab-btn' + (!isL ? ' active' : '');
 }
 
-function togglePw(id, btn) {
-  const el = document.getElementById(id);
-  const show = el.type==='password';
-  el.type = show?'text':'password';
-  btn.textContent = show?'HIDE':'SHOW';
-  btn.style.color = show?'var(--neon-blue)':'';
-}
-
-function checkStrength(v) {
-  let s=0;
-  if(v.length>=8)s++; if(/[A-Z]/.test(v))s++; if(/[0-9]/.test(v))s++; if(/[^A-Za-z0-9]/.test(v))s++;
-  const levels=[[0,'',''],  [25,'#ff4444','WEAK'],[50,'#ffd700','FAIR'],[75,'#ff9500','GOOD'],[100,'#00ff88','STRONG']];
-  const [pct,col,lbl] = levels[s];
-  const bar=document.getElementById('sw-bar'), lb=document.getElementById('sw-lbl');
-  bar.style.width=pct+'%'; bar.style.background=col; lb.textContent=lbl; lb.style.color=col;
-}
+// ─── SMART LOGIC ─────────────────────────────────────────────────────────────
 
 function doLogin(btn) {
   btn.classList.add('btn-loading');
-  localStorage.setItem('oxy_logged_in','true');
-  setTimeout(()=>window.location.href='details.html', 900);
+  
+  setTimeout(() => {
+    // 1. Check if user actually has a saved profile from before
+    const hasProfile = localStorage.getItem('oxtrace_health_profile');
+    
+    if (hasProfile) {
+      // Returning user -> Go to DASHBOARD
+      localStorage.setItem('oxy_onboarded', 'true'); // Key used by index.html
+      window.location.href = 'index.html';
+    } else {
+      // New user (or cleared cache) -> Go to ONBOARDING
+      window.location.href = 'details.html';
+    }
+  }, 1000);
 }
+
 function doRegister(btn) {
   btn.classList.add('btn-loading');
-  localStorage.setItem('oxy_logged_in','true');
-  setTimeout(()=>window.location.href='details.html', 900);
-}
-function googleLogin() {
-  localStorage.setItem('oxy_logged_in','true');
-  window.location.href='details.html';
+  setTimeout(() => {
+    // Registering -> Always go to ONBOARDING first
+    window.location.href = 'details.html'; 
+  }, 1000);
 }
 </script>
 </body>
