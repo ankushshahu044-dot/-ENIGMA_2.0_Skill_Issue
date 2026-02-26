@@ -1,0 +1,2615 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>OxyTrace · Air Quality Map</title>
+
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+
+  <!-- Google Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    /* ── Dark Mode (default) ── */
+    :root {
+      --bg: #070b12;
+      --panel: rgba(10, 16, 26, 0.88);
+      --panel-solid: #0a101a;
+      --border: rgba(0, 200, 255, 0.15);
+      --header-grad: rgba(7,11,18,0.95);
+      --accent-blue: #00c8ff;
+      --accent-red: #ff3b5c;
+      --accent-green: #00e87a;
+      --accent-yellow: #ffe944;
+      --text: #c8dff0;
+      --muted: #4a6680;
+      --zoom-bg: rgba(10,16,26,0.88);
+      --zoom-border: rgba(0,200,255,0.15);
+      --attrib-bg: rgba(7,11,18,0.7);
+    }
+
+    /* ── Light Mode ── */
+    body.light {
+      --bg: #f0f4f8;
+      --panel: rgba(255, 255, 255, 0.92);
+      --panel-solid: #ffffff;
+      --border: rgba(0, 120, 200, 0.2);
+      --header-grad: rgba(240,244,248,0.97);
+      --accent-blue: #0077cc;
+      --accent-red: #e02040;
+      --accent-green: #00a855;
+      --accent-yellow: #d4900a;
+      --text: #1a2c3d;
+      --muted: #6b8299;
+      --zoom-bg: rgba(255,255,255,0.92);
+      --zoom-border: rgba(0,120,200,0.2);
+      --attrib-bg: rgba(240,244,248,0.85);
+    }
+
+    html, body {
+      width: 100%; height: 100%;
+      overflow: hidden;
+      background: var(--bg);
+      font-family: 'Rajdhani', sans-serif;
+      color: var(--text);
+      transition: background 0.3s ease, color 0.3s ease;
+    }
+
+    #map {
+      width: 100vw;
+      height: 100vh;
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+    }
+
+    /* ── HUD Header ── */
+    #hud-header {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      z-index: 800;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 22px;
+      background: linear-gradient(180deg, var(--header-grad) 60%, transparent);
+      pointer-events: none;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .brand-icon {
+      width: 34px; height: 34px;
+      border-radius: 8px;
+      background: linear-gradient(135deg, var(--accent-blue), #0066ff);
+      display: grid;
+      place-items: center;
+      font-size: 18px;
+    }
+
+    .brand-name {
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      color: var(--text);
+    }
+
+    .brand-name span { color: var(--accent-blue); }
+
+    .brand-sub {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      letter-spacing: 3px;
+      color: var(--muted);
+      text-transform: uppercase;
+    }
+
+    .hud-time {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      color: var(--muted);
+      letter-spacing: 2px;
+    }
+
+    /* ── Legend Panel ── */
+    #legend {
+      position: fixed;
+      bottom: 28px;
+      left: 22px;
+      z-index: 800;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px 20px;
+      backdrop-filter: blur(12px);
+      min-width: 210px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.05);
+    }
+
+    #legend h3 {
+      font-size: 11px;
+      letter-spacing: 3px;
+      color: var(--muted);
+      text-transform: uppercase;
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 9px;
+      font-size: 13px;
+      font-weight: 500;
+      letter-spacing: 0.5px;
+    }
+
+    .legend-item:last-child { margin-bottom: 0; }
+
+    .leg-dot {
+      width: 12px; height: 12px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .leg-dot.blue  { background: var(--accent-blue); box-shadow: 0 0 6px var(--accent-blue); }
+    .leg-dot.red   { background: var(--accent-red);  border: 2px solid var(--accent-red); border-radius: 2px; opacity: 0.8; }
+    .leg-dot.green { background: var(--accent-green); box-shadow: 0 0 6px var(--accent-green); }
+    .leg-line {
+      width: 20px; height: 2px;
+      border-top: 2px dashed var(--accent-yellow);
+      flex-shrink: 0;
+    }
+
+    /* ── AQI Spectrum Legend Swatches ── */
+    .leg-swatch {
+      width: 14px; height: 14px;
+      border-radius: 3px;
+      flex-shrink: 0;
+      opacity: 0.85;
+    }
+    .leg-swatch.s-good     { background: #00e87a; }
+    .leg-swatch.s-mod      { background: #ffdc28; }
+    .leg-swatch.s-sens     { background: #ff5a14; }
+    .leg-swatch.s-unhealthy{ background: #a00040; }
+
+    /* ── Heatmap Toggle ── */
+    #heatmap-toggle {
+      position: fixed;
+      top: 176px;
+      left: 22px;
+      z-index: 800;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 9px 16px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      cursor: pointer;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      letter-spacing: 2px;
+      color: var(--muted);
+      backdrop-filter: blur(12px);
+      box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+      transition: background 0.25s, color 0.25s, border-color 0.25s, box-shadow 0.25s;
+      user-select: none;
+    }
+    #heatmap-toggle:hover {
+      color: var(--accent-blue);
+      border-color: var(--accent-blue);
+    }
+    #heatmap-toggle.active {
+      color: var(--accent-blue);
+      border-color: var(--accent-blue);
+      background: rgba(0,200,255,0.1);
+    }
+
+    /* ── Heatmap loading indicator ── */
+    #heatmap-status {
+      position: fixed;
+      top: 220px;
+      left: 22px;
+      z-index: 800;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9px;
+      letter-spacing: 2px;
+      color: var(--muted);
+      opacity: 0;
+      transition: opacity 0.3s;
+      pointer-events: none;
+    }
+    #heatmap-status.visible { opacity: 1; }
+
+    /* ── AQI Chip ── */
+    #aqi-panel {
+      position: fixed;
+      top: 80px;
+      right: 22px;
+      z-index: 800;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px 18px;
+      backdrop-filter: blur(12px);
+      text-align: center;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.05);
+    }
+
+    #aqi-panel .label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      letter-spacing: 3px;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+
+    #aqi-panel .value {
+      font-size: 36px;
+      font-weight: 700;
+      line-height: 1;
+      color: var(--accent-red);
+    }
+
+    #aqi-panel .status {
+      font-size: 11px;
+      color: var(--accent-red);
+      letter-spacing: 1px;
+      margin-top: 4px;
+      opacity: 0.8;
+    }
+
+    /* ── Status bar ── */
+    #status-bar {
+      position: fixed;
+      bottom: 28px;
+      right: 22px;
+      z-index: 800;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 16px;
+      backdrop-filter: blur(12px);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      color: var(--muted);
+      letter-spacing: 1px;
+    }
+
+    #status-bar .status-dot {
+      display: inline-block;
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: var(--accent-green);
+      box-shadow: 0 0 6px var(--accent-green);
+      margin-right: 7px;
+      animation: pulse-dot 1.5s ease-in-out infinite;
+    }
+
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+
+    /* ── Leaflet overrides ── */
+    .leaflet-control-zoom {
+      border: 1px solid var(--zoom-border) !important;
+      border-radius: 8px !important;
+      overflow: hidden;
+    }
+
+    .leaflet-control-zoom a {
+      background: var(--zoom-bg) !important;
+      color: var(--text) !important;
+      border-bottom: 1px solid var(--zoom-border) !important;
+    }
+
+    .leaflet-control-zoom a:hover {
+      background: rgba(0, 120, 200, 0.1) !important;
+      color: var(--accent-blue) !important;
+    }
+
+    .leaflet-control-attribution {
+      background: var(--attrib-bg) !important;
+      color: var(--muted) !important;
+      font-size: 9px !important;
+    }
+
+    .leaflet-control-attribution a { color: var(--muted) !important; }
+
+    /* ── Directional User Marker (Google Maps style) ── */
+    .user-marker-wrap {
+      position: relative;
+      width: 48px; height: 48px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .user-beam {
+      position: absolute;
+      top: -16px; left: 50%;
+      transform: translateX(-50%);
+      width: 0; height: 0;
+      border-left: 13px solid transparent;
+      border-right: 13px solid transparent;
+      border-bottom: 22px solid rgba(0,200,255,0.22);
+      filter: blur(1px);
+    }
+    .user-ring {
+      position: absolute;
+      width: 44px; height: 44px;
+      border-radius: 50%;
+      background: rgba(0,200,255,0.07);
+      border: 1.5px solid rgba(0,200,255,0.28);
+      animation: ring-pulse 2.2s ease-in-out infinite;
+    }
+    .user-dot {
+      position: relative;
+      width: 20px; height: 20px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 35% 35%, #5ae0ff, #0088cc);
+      border: 2.5px solid #fff;
+      box-shadow: 0 0 0 3px rgba(0,200,255,0.35), 0 2px 8px rgba(0,0,0,0.5);
+      z-index: 2;
+    }
+    .user-arrow {
+      position: absolute;
+      top: -8px; left: 50%;
+      transform: translateX(-50%);
+      width: 0; height: 0;
+      border-left: 6px solid transparent;
+      border-right: 6px solid transparent;
+      border-bottom: 10px solid #fff;
+      z-index: 3;
+      filter: drop-shadow(0 0 3px rgba(0,200,255,0.9));
+    }
+    @keyframes ring-pulse {
+      0%,100% { transform: scale(1);   opacity: 0.6; }
+      50%      { transform: scale(1.3); opacity: 0.15; }
+    }
+
+    /* ── Locate loading overlay ── */
+    #locate-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 999;
+      background: rgba(7,11,18,0.92);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 18px;
+      transition: opacity 0.5s ease;
+    }
+
+    #locate-overlay.hidden { opacity: 0; pointer-events: none; }
+
+    .spinner {
+      width: 52px; height: 52px;
+      border-radius: 50%;
+      border: 2px solid rgba(0,200,255,0.15);
+      border-top-color: var(--accent-blue);
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .locate-text {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      letter-spacing: 3px;
+      color: var(--muted);
+    }
+
+    /* ── Theme Toggle Button ── */
+    #theme-toggle {
+      position: fixed;
+      top: 130px;
+      left: 22px;
+      z-index: 800;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 9px 16px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      cursor: pointer;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      letter-spacing: 2px;
+      color: var(--muted);
+      backdrop-filter: blur(12px);
+      box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+      transition: background 0.25s, color 0.25s, border-color 0.25s, box-shadow 0.25s;
+      user-select: none;
+    }
+
+    #theme-toggle:hover {
+      color: var(--accent-blue);
+      border-color: var(--accent-blue);
+      box-shadow: 0 4px 20px rgba(0,120,200,0.2);
+    }
+
+    /* Smooth transitions on all panels */
+    #hud-header, #legend, #aqi-panel, #status-bar,
+    #safe-zone-card, #layer-toggle, .layer-btn,
+    .leaflet-control-zoom a, .leaflet-control-attribution {
+      transition: background 0.3s ease, border-color 0.3s ease,
+                  color 0.3s ease, box-shadow 0.3s ease;
+    }
+
+    /* ── Layer Toggle ── */
+    #layer-toggle {
+      position: fixed;
+      top: 80px;
+      left: 22px;
+      z-index: 800;
+      display: flex;
+      border-radius: 10px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    }
+
+    .layer-btn {
+      padding: 9px 16px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      background: var(--panel);
+      color: var(--muted);
+      border: none;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      backdrop-filter: blur(12px);
+      border-right: 1px solid var(--border);
+    }
+
+    .layer-btn:last-child { border-right: none; }
+
+    .layer-btn.active {
+      background: rgba(0, 200, 255, 0.15);
+      color: var(--accent-blue);
+    }
+
+    .layer-btn:hover:not(.active) {
+      background: rgba(255,255,255,0.05);
+      color: var(--text);
+    }
+
+    /* ── Safe Zone Info Card ── */
+    #safe-zone-card {
+      position: fixed;
+      bottom: 28px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 800;
+      background: var(--panel);
+      border: 1px solid rgba(0, 232, 122, 0.3);
+      border-radius: 14px;
+      padding: 14px 22px;
+      backdrop-filter: blur(14px);
+      box-shadow: 0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px rgba(0,232,122,0.08), inset 0 1px 0 rgba(255,255,255,0.05);
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      white-space: nowrap;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.4s ease, transform 0.4s ease;
+      transform: translateX(-50%) translateY(10px);
+    }
+
+    #safe-zone-card.visible {
+      opacity: 1;
+      pointer-events: auto;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    .szc-icon {
+      font-size: 22px;
+      line-height: 1;
+    }
+
+    .szc-divider {
+      width: 1px;
+      height: 32px;
+      background: rgba(0,232,122,0.2);
+    }
+
+    .szc-block {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+    }
+
+    .szc-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9px;
+      letter-spacing: 2.5px;
+      color: var(--muted);
+      text-transform: uppercase;
+    }
+
+    .szc-value {
+      font-size: 18px;
+      font-weight: 700;
+      line-height: 1;
+    }
+
+    .szc-value.green { color: var(--accent-green); }
+    .szc-value.yellow { color: var(--accent-yellow); }
+
+    .szc-sub {
+      font-size: 10px;
+      color: var(--muted);
+      letter-spacing: 0.5px;
+    }
+
+    /* Safe zone popup style */
+    .leaflet-popup-content-wrapper {
+      background: var(--panel) !important;
+      border: 1px solid rgba(0, 232, 122, 0.3) !important;
+      border-radius: 10px !important;
+      color: var(--text) !important;
+      backdrop-filter: blur(12px);
+      box-shadow: 0 8px 24px rgba(0,0,0,0.5) !important;
+    }
+    .leaflet-popup-tip { background: var(--panel) !important; }
+    .leaflet-popup-content { font-family: 'Rajdhani', sans-serif; font-size: 14px; font-weight: 600; }
+
+    /* AQI spectrum tooltip */
+    .aqi-tip {
+      font-family: 'JetBrains Mono', monospace !important;
+      font-size: 11px !important;
+      letter-spacing: 1px;
+      background: rgba(7,11,18,0.88) !important;
+      border: 1px solid rgba(0,200,255,0.2) !important;
+      color: #c8dff0 !important;
+      border-radius: 6px !important;
+      padding: 4px 8px !important;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.4) !important;
+    }
+    .aqi-tip::before { display: none; }
+
+    /* ── Heatmap canvas pulse animation ── */
+    @keyframes heatmap-breathe {
+      0%,100% { opacity: 0.92; }
+      50%      { opacity: 0.72; }
+    }
+    .heatmap-canvas-breathing {
+      animation: heatmap-breathe 4s ease-in-out infinite;
+    }
+
+    /* ── AQI Sparkline in panel ── */
+    #aqi-sparkline-wrap {
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid var(--border);
+    }
+    #aqi-sparkline-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 8px;
+      letter-spacing: 2px;
+      color: var(--muted);
+      text-align: center;
+      margin-bottom: 4px;
+    }
+    #aqi-sparkline {
+      display: block;
+      width: 100%;
+      height: 36px;
+    }
+    #aqi-trend-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9px;
+      letter-spacing: 1px;
+      text-align: center;
+      margin-top: 3px;
+    }
+
+    /* ── Timeline / Forecast Panel ── */
+    #timeline-panel {
+      position: fixed;
+      bottom: 90px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 800;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 14px 20px 12px;
+      backdrop-filter: blur(14px);
+      box-shadow: 0 8px 32px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.05);
+      min-width: 360px;
+      max-width: 92vw;
+      display: none;
+    }
+    #timeline-panel.visible { display: block; }
+
+    .tl-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+    }
+    .tl-title {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9px;
+      letter-spacing: 2.5px;
+      color: var(--muted);
+      text-transform: uppercase;
+    }
+    .tl-tabs {
+      display: flex;
+      gap: 4px;
+    }
+    .tl-tab {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 8px;
+      letter-spacing: 1px;
+      padding: 3px 8px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: none;
+      color: var(--muted);
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .tl-tab.active {
+      background: rgba(0,200,255,0.15);
+      color: var(--accent-blue);
+      border-color: var(--accent-blue);
+    }
+    .tl-close {
+      font-size: 14px;
+      cursor: pointer;
+      color: var(--muted);
+      line-height: 1;
+      padding: 0 4px;
+    }
+    .tl-close:hover { color: var(--text); }
+
+    .tl-chart-wrap {
+      position: relative;
+      height: 80px;
+      margin-bottom: 8px;
+    }
+    #tl-canvas {
+      width: 100%;
+      height: 80px;
+      display: block;
+      cursor: crosshair;
+    }
+    #tl-tooltip {
+      position: absolute;
+      top: 0; left: 0;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9px;
+      letter-spacing: 1px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 4px 8px;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.15s;
+      white-space: nowrap;
+      z-index: 10;
+    }
+    #tl-tooltip.visible { opacity: 1; }
+
+    .tl-slider-wrap {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .tl-time-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9px;
+      letter-spacing: 1px;
+      color: var(--muted);
+      min-width: 72px;
+      text-align: right;
+    }
+    #tl-slider {
+      flex: 1;
+      -webkit-appearance: none;
+      height: 3px;
+      border-radius: 2px;
+      background: var(--border);
+      outline: none;
+      cursor: pointer;
+    }
+    #tl-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 14px; height: 14px;
+      border-radius: 50%;
+      background: var(--accent-blue);
+      box-shadow: 0 0 8px var(--accent-blue);
+      cursor: pointer;
+    }
+    #tl-slider::-moz-range-thumb {
+      width: 14px; height: 14px;
+      border-radius: 50%;
+      background: var(--accent-blue);
+      box-shadow: 0 0 8px var(--accent-blue);
+      border: none;
+      cursor: pointer;
+    }
+    .tl-aqi-now {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9px;
+      color: var(--muted);
+      min-width: 58px;
+    }
+
+    /* ── Timeline toggle button ── */
+    #timeline-toggle {
+      position: fixed;
+      top: 222px;
+      left: 22px;
+      z-index: 800;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 9px 16px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      cursor: pointer;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      letter-spacing: 2px;
+      color: var(--muted);
+      backdrop-filter: blur(12px);
+      box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+      transition: background 0.25s, color 0.25s, border-color 0.25s;
+      user-select: none;
+    }
+    #timeline-toggle:hover, #timeline-toggle.active {
+      color: var(--accent-blue);
+      border-color: var(--accent-blue);
+    }
+    #timeline-toggle.active { background: rgba(0,200,255,0.1); }
+
+    /* ── Wind toggle button ── */
+    #wind-toggle {
+      position: fixed;
+      top: 268px;
+      left: 22px;
+      z-index: 800;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 9px 16px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      cursor: pointer;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      letter-spacing: 2px;
+      color: var(--muted);
+      backdrop-filter: blur(12px);
+      box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+      transition: background 0.25s, color 0.25s, border-color 0.25s;
+      user-select: none;
+    }
+    #wind-toggle:hover, #wind-toggle.active {
+      color: var(--accent-blue);
+      border-color: var(--accent-blue);
+    }
+    #wind-toggle.active { background: rgba(0,200,255,0.1); }
+
+    /* ── Notify / Share buttons in AQI panel ── */
+    .aqi-action-row {
+      display: flex;
+      gap: 6px;
+      margin-top: 8px;
+      justify-content: center;
+    }
+    .aqi-action-btn {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 8px;
+      letter-spacing: 1px;
+      padding: 4px 8px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: none;
+      color: var(--muted);
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .aqi-action-btn:hover {
+      color: var(--accent-blue);
+      border-color: var(--accent-blue);
+    }
+    .aqi-action-btn.active {
+      color: var(--accent-green);
+      border-color: var(--accent-green);
+    }
+
+    /* ── Route AQI exposure badge in safe zone card ── */
+    #route-exposure-wrap {
+      display: none;
+      align-items: center;
+      gap: 6px;
+      margin-top: 6px;
+      padding-top: 6px;
+      border-top: 1px solid rgba(0,232,122,0.15);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9px;
+      letter-spacing: 1px;
+      color: var(--muted);
+      justify-content: center;
+      width: 100%;
+    }
+    #route-exposure-wrap.visible { display: flex; }
+    #route-exposure-score {
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    /* ── Share toast ── */
+    #share-toast {
+      position: fixed;
+      top: 80px;
+      left: 50%;
+      transform: translateX(-50%) translateY(-10px);
+      z-index: 1000;
+      background: var(--panel);
+      border: 1px solid var(--accent-green);
+      border-radius: 10px;
+      padding: 10px 18px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      letter-spacing: 2px;
+      color: var(--accent-green);
+      backdrop-filter: blur(12px);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s, transform 0.3s;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+    }
+    #share-toast.visible {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    /* ── Contour line tooltip ── */
+    .contour-tip {
+      font-family: 'JetBrains Mono', monospace !important;
+      font-size: 10px !important;
+      letter-spacing: 1px;
+      background: rgba(7,11,18,0.88) !important;
+      border: 1px solid rgba(255,255,255,0.15) !important;
+      color: #c8dff0 !important;
+      border-radius: 6px !important;
+      padding: 3px 7px !important;
+    }
+    .contour-tip::before { display: none; }
+  </style>
+</head>
+<body>
+
+<!-- Locate overlay -->
+<div id="locate-overlay">
+  <div class="spinner"></div>
+  <div class="locate-text">ACQUIRING GPS SIGNAL</div>
+</div>
+
+<!-- Map -->
+<div id="map"></div>
+
+<!-- Header HUD -->
+<div id="hud-header">
+  <div class="brand">
+    <div class="brand-icon">🫁</div>
+    <div>
+      <div class="brand-name">OXY<span>TRACE</span></div>
+      <div class="brand-sub">Lung Health · Air Quality Monitor</div>
+    </div>
+  </div>
+  <div class="hud-time" id="clock"></div>
+</div>
+
+<!-- Layer Toggle + Theme Toggle -->
+<div id="layer-toggle">
+  <button class="layer-btn active" id="btn-dark" onclick="setLayer('dark')">🌑 Dark</button>
+  <button class="layer-btn" id="btn-satellite" onclick="setLayer('satellite')">🛰 Satellite</button>
+</div>
+
+<!-- Theme toggle -->
+<div id="theme-toggle" onclick="toggleTheme()" title="Toggle Light / Dark Mode">
+  <span id="theme-icon">☀️</span>
+  <span id="theme-label">LIGHT</span>
+</div>
+
+<!-- Heatmap toggle -->
+<div id="heatmap-toggle" onclick="toggleHeatmap()" title="Toggle AQI Spectrum Heatmap">
+  <span>🌡️</span>
+  <span id="heatmap-label">AQI MAP</span>
+</div>
+<div id="heatmap-status">SAMPLING AQI...</div>
+
+<!-- AQI Panel -->
+<div id="aqi-panel">
+  <div class="label">YOUR AQI</div>
+  <div class="value" id="aqi-value">—</div>
+  <div class="status" id="aqi-status">LOADING...</div>
+  <div id="aqi-sparkline-wrap" style="display:none">
+    <div id="aqi-sparkline-label">24H TREND</div>
+    <canvas id="aqi-sparkline"></canvas>
+    <div id="aqi-trend-label" style="color:var(--muted)">—</div>
+  </div>
+  <div class="aqi-action-row">
+    <button class="aqi-action-btn" id="notify-btn" onclick="toggleAQIAlert()" title="Alert when AQI > 100">🔔 ALERT</button>
+    <button class="aqi-action-btn" onclick="shareLocation()" title="Share location AQI link">🔗 SHARE</button>
+  </div>
+</div>
+
+<!-- Share toast -->
+<div id="share-toast">✅ LINK COPIED TO CLIPBOARD</div>
+
+<!-- Timeline toggle -->
+<div id="timeline-toggle" onclick="toggleTimeline()" title="Show AQI timeline & forecast">
+  <span>📈</span>
+  <span id="timeline-label">TIMELINE</span>
+</div>
+
+<!-- Wind toggle -->
+<div id="wind-toggle" onclick="toggleWind()" title="Show wind layer">
+  <span>💨</span>
+  <span id="wind-label">WIND</span>
+</div>
+
+<!-- Timeline / Forecast Panel -->
+<div id="timeline-panel">
+  <div class="tl-header">
+    <span class="tl-title" id="tl-title-label">AQI TIMELINE</span>
+    <div class="tl-tabs">
+      <button class="tl-tab active" onclick="setTimelineMode('history')">24H</button>
+      <button class="tl-tab" onclick="setTimelineMode('today')">TODAY</button>
+      <button class="tl-tab" onclick="setTimelineMode('forecast')">5 DAY</button>
+    </div>
+    <span class="tl-close" onclick="toggleTimeline()">✕</span>
+  </div>
+  <div class="tl-chart-wrap">
+    <canvas id="tl-canvas"></canvas>
+    <div id="tl-tooltip"></div>
+  </div>
+  <div class="tl-slider-wrap">
+    <span class="tl-time-label" id="tl-time-label">NOW</span>
+    <input type="range" id="tl-slider" min="0" max="23" value="23" oninput="onTimelineSlider(this.value)">
+    <span class="tl-aqi-now" id="tl-aqi-now">AQI —</span>
+  </div>
+</div>
+
+<!-- Legend -->
+<div id="legend">
+  <h3>Map Legend</h3>
+  <div class="legend-item"><div class="leg-dot blue"></div> Your Location</div>
+  <div class="legend-item"><div class="leg-dot red"></div> Your AQI Zone</div>
+  <div class="legend-item"><div class="leg-dot green"></div> Safe Zone · AQI ≤ 100</div>
+  <div class="legend-item"><div class="leg-line"></div> Navigation Route</div>
+  <div style="height:1px;background:var(--border);margin:8px 0;"></div>
+  <div style="font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:2px;color:var(--muted);margin-bottom:8px;">AQI SPECTRUM</div>
+  <div class="legend-item"><div class="leg-swatch s-good"></div> 0–50 · Good</div>
+  <div class="legend-item"><div class="leg-swatch s-mod"></div> 51–100 · Moderate</div>
+  <div class="legend-item"><div class="leg-swatch s-sens"></div> 101–150 · Sensitive</div>
+  <div class="legend-item"><div class="leg-swatch s-unhealthy"></div> 150+ · Unhealthy</div>
+</div>
+
+<!-- Safe Zone Info Card -->
+<div id="safe-zone-card">
+  <div class="szc-icon">🌿</div>
+  <div class="szc-block">
+    <div class="szc-label">RECOMMENDED · AQI ≤ 100</div>
+    <div class="szc-value green" id="szc-park-name" style="font-size:13px;font-weight:600;">Searching...</div>
+  </div>
+  <div class="szc-divider"></div>
+  <div class="szc-block">
+    <div class="szc-label">AQI</div>
+    <div class="szc-value green" id="szc-aqi">—</div>
+    <div class="szc-sub" id="szc-aqi-cat">LOADING</div>
+  </div>
+  <div class="szc-divider"></div>
+  <div class="szc-block">
+    <div class="szc-label">Distance</div>
+    <div class="szc-value yellow" id="szc-dist">—</div>
+    <div class="szc-sub" id="szc-dist-unit">FROM YOU</div>
+  </div>
+  <div class="szc-divider" id="szc-dir-divider" style="display:none"></div>
+  <div class="szc-block" id="szc-dir-block" style="display:none">
+    <div class="szc-label">Direction</div>
+    <div class="szc-value" id="szc-dir" style="font-size:15px;">—</div>
+    <div class="szc-sub" id="szc-dir-sub"></div>
+  </div>
+  <div class="szc-divider"></div>
+  <div class="szc-block">
+    <button id="szc-refresh" onclick="refreshRecommendation()" title="Re-run recommendation search" style="background:none;border:1px solid var(--border);border-radius:8px;padding:6px 10px;cursor:pointer;color:var(--muted);font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:1.5px;transition:all 0.2s;">🔄 REFRESH</button>
+  </div>
+</div>
+<!-- Route exposure bar -->
+<div id="route-exposure-wrap" style="position:fixed;bottom:10px;left:50%;transform:translateX(-50%);z-index:799;background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:7px 18px;backdrop-filter:blur(12px);font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:1.5px;color:var(--muted);display:none;align-items:center;gap:8px;box-shadow:0 4px 16px rgba(0,0,0,0.4);">
+  <span>🛣️ ROUTE EXPOSURE AVG AQI:</span>
+  <span id="route-exposure-score" style="font-size:12px;font-weight:700;color:var(--accent-yellow)">—</span>
+  <span id="route-exposure-label"></span>
+</div>
+
+<!-- Status bar -->
+<div id="status-bar">
+  <span class="status-dot"></span>LIVE · GPS ACTIVE
+</div>
+
+<!-- Leaflet JS -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+
+<script>
+  // ── Clock ──
+  const clock = document.getElementById('clock');
+  function tick() {
+    const now = new Date();
+    clock.textContent = now.toLocaleTimeString('en-US', { hour12: false }) + ' · ' +
+      now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).toUpperCase();
+  }
+  tick(); setInterval(tick, 1000);
+
+  // ── Map init ──
+  const map = L.map('map', { zoomControl: true, attributionControl: true });
+
+  // ── Tile Layers ──
+  const layers = {
+    dark: L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+      subdomains: 'abcd', maxZoom: 19
+    }),
+    satellite: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+      attribution: '&copy; Esri &mdash; Source: Esri, USGS, NOAA',
+      maxZoom: 19
+    }),
+    light: L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+      subdomains: 'abcd', maxZoom: 19
+    })
+  };
+  layers.dark.addTo(map);
+  let activeLayer = 'dark';
+  let isLightMode = false;
+
+  function setLayer(name) {
+    if (name === activeLayer) return;
+    map.removeLayer(layers[activeLayer]);
+    layers[name].addTo(map);
+    map.eachLayer(l => { if (l !== layers[name] && l.bringToFront) l.bringToFront(); });
+    activeLayer = name;
+    document.getElementById('btn-dark').classList.toggle('active', name === 'dark');
+    document.getElementById('btn-satellite').classList.toggle('active', name === 'satellite');
+  }
+
+  function toggleTheme() {
+    isLightMode = !isLightMode;
+    document.body.classList.toggle('light', isLightMode);
+    const icon = document.getElementById('theme-icon');
+    const label = document.getElementById('theme-label');
+    if (isLightMode) {
+      icon.textContent = '🌙';
+      label.textContent = 'DARK';
+      // Switch to light tile if currently on dark map
+      if (activeLayer === 'dark') {
+        map.removeLayer(layers.dark);
+        layers.light.addTo(map);
+        map.eachLayer(l => { if (l !== layers.light && l.bringToFront) l.bringToFront(); });
+        activeLayer = 'light';
+        document.getElementById('btn-dark').classList.remove('active');
+      }
+    } else {
+      icon.textContent = '☀️';
+      label.textContent = 'LIGHT';
+      // Switch back to dark tile if on light map
+      if (activeLayer === 'light') {
+        map.removeLayer(layers.light);
+        layers.dark.addTo(map);
+        map.eachLayer(l => { if (l !== layers.dark && l.bringToFront) l.bringToFront(); });
+        activeLayer = 'dark';
+        document.getElementById('btn-dark').classList.add('active');
+      }
+    }
+  }
+
+  // ── User Icon: directional arrow (Google Maps style) ──
+  const userMarkerHTML =
+    '<div class="user-marker-wrap" id="user-marker-wrap">' +
+      '<div class="user-beam"></div>' +
+      '<div class="user-ring"></div>' +
+      '<div class="user-dot"></div>' +
+      '<div class="user-arrow"></div>' +
+    '</div>';
+
+  const userIcon = L.divIcon({
+    className: '',
+    html: userMarkerHTML,
+    iconSize: [48, 48],
+    iconAnchor: [24, 24]
+  });
+
+  const safeIcon = L.divIcon({
+    className: '',
+    html: '<div style="width:28px;height:28px;border-radius:50%;background:rgba(0,232,122,0.2);border:2px solid #00e87a;box-shadow:0 0 12px rgba(0,232,122,0.6),0 0 24px rgba(0,232,122,0.3);display:grid;place-items:center;font-size:14px;">&#x1F33F;</div>',
+    iconSize: [28, 28],
+    iconAnchor: [14, 14]
+  });
+
+  // ── Compass heading tracker ──
+  let currentHeading = 0;
+
+  function applyHeading(deg) {
+    currentHeading = deg;
+    const el = document.getElementById('user-marker-wrap');
+    if (el) el.style.transform = 'rotate(' + deg + 'deg)';
+  }
+
+  function startCompass() {
+    // iOS 13+ requires permission
+    if (typeof DeviceOrientationEvent !== 'undefined' &&
+        typeof DeviceOrientationEvent.requestPermission === 'function') {
+      DeviceOrientationEvent.requestPermission()
+        .then(state => {
+          if (state === 'granted') listenOrientation();
+        })
+        .catch(() => {});
+    } else if (window.DeviceOrientationEvent) {
+      listenOrientation();
+    }
+  }
+
+  function listenOrientation() {
+    window.addEventListener('deviceorientationabsolute', handleOrientation, true);
+    window.addEventListener('deviceorientation', handleOrientation, true);
+  }
+
+  function handleOrientation(e) {
+    let heading = null;
+    // webkitCompassHeading is iOS (true north), alpha is Android (needs negation)
+    if (e.webkitCompassHeading != null) {
+      heading = e.webkitCompassHeading;
+    } else if (e.absolute && e.alpha != null) {
+      heading = 360 - e.alpha;
+    } else if (e.alpha != null) {
+      heading = 360 - e.alpha;
+    }
+    if (heading !== null) applyHeading(Math.round(heading));
+  }
+
+  // ── Haversine distance (meters) ──
+  function haversine(lat1, lng1, lat2, lng2) {
+    const R = 6371000;
+    const toRad = x => x * Math.PI / 180;
+    const dLat = toRad(lat2 - lat1);
+    const dLng = toRad(lng2 - lng1);
+    const a = Math.sin(dLat/2)**2 +
+              Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng/2)**2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  }
+
+  function formatDistance(meters) {
+    if (meters >= 1000) {
+      return { value: (meters / 1000).toFixed(1) + ' km', unit: 'FROM YOU' };
+    }
+    return { value: Math.round(meters) + ' m', unit: 'FROM YOU' };
+  }
+
+
+  // ── AQI Helpers (US AQI scale) ──
+  function aqiCategory(aqi) {
+    if (aqi === null || aqi === undefined) return { label: 'N/A',           color: '#888888', emoji: '❓' };
+    if (aqi <= 50)  return { label: 'GOOD',           color: '#00e87a', emoji: '✅' };
+    if (aqi <= 100) return { label: 'MODERATE',        color: '#ffe944', emoji: '🟡' };
+    if (aqi <= 150) return { label: 'SENSITIVE GRPS',  color: '#ff9500', emoji: '⚠️' };
+    if (aqi <= 200) return { label: 'UNHEALTHY',       color: '#ff3b5c', emoji: '🔴' };
+    if (aqi <= 300) return { label: 'VERY UNHEALTHY',  color: '#c048ff', emoji: '🟣' };
+    return           { label: 'HAZARDOUS',             color: '#8b0000', emoji: '☠️' };
+  }
+
+  async function fetchAQI(lat, lng) {
+    const url = `https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${lat}&longitude=${lng}&current=us_aqi&timezone=auto`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('AQI fetch failed');
+    const data = await res.json();
+    return data.current?.us_aqi ?? null;
+  }
+
+  function updateAQIPanel(aqi) {
+    const cat = aqiCategory(aqi);
+    const valEl  = document.getElementById('aqi-value');
+    const statEl = document.getElementById('aqi-status');
+    valEl.textContent  = aqi !== null ? aqi : '—';
+    valEl.style.color  = cat.color;
+    statEl.textContent = cat.emoji + ' ' + cat.label;
+    statEl.style.color = cat.color;
+    document.getElementById('aqi-panel').style.borderColor = cat.color + '55';
+  }
+
+  function updateSafeZoneCard(aqi) {
+    const cat = aqiCategory(aqi);
+    const aqiEl = document.getElementById('szc-aqi');
+    const catEl = document.getElementById('szc-aqi-cat');
+    aqiEl.textContent = aqi !== null ? aqi : '—';
+    aqiEl.style.color = cat.color;
+    catEl.textContent = cat.label;
+  }
+
+  const TARGET_AQI = 100;
+  const STEP_KM    = 15; // probe spacing — larger than Open-Meteo ~11km grid so each probe is a DIFFERENT cell
+
+  // Shift a coordinate by km offsets
+  function offsetCoord(lat, lng, dxKm, dyKm) {
+    return {
+      lat: lat + dyKm / 110.574,
+      lng: lng + dxKm / (111.320 * Math.cos(lat * Math.PI / 180))
+    };
+  }
+
+  // ── Dense spiral grid search ──────────────────────────────────────────────
+  // Generates probe points in an outward spiral so the NEAREST qualifying cell
+  // is always found first. Points are spaced STEP_KM apart so every probe lands
+  // in a genuinely different Open-Meteo grid cell (grid ≈ 11km, step = 15km).
+  //
+  // Ring 0 = user's own cell (skip — we already have user AQI)
+  // Ring 1 = 8 points at 15km
+  // Ring 2 = 16 points at 30km  (finer angular spacing at larger radius)
+  // Ring N = 8*N points at N*15km
+  //
+  // We scan ring-by-ring. The moment ANY point in a ring qualifies (AQI ≤ target),
+  // we fetch ALL points in that ring in parallel, collect all qualifiers, then
+  // binary-search inward between ring N-1 and ring N to pinpoint the exact nearest
+  // qualifying kilometre. This gives sub-grid accuracy for the final pin.
+  // ─────────────────────────────────────────────────────────────────────────
+
+  function buildRing(lat, lng, ringIndex) {
+    // Points evenly distributed around a circle of radius ringIndex * STEP_KM
+    const n = Math.max(8, ringIndex * 8); // more points as radius grows
+    const radius = ringIndex * STEP_KM;
+    const points = [];
+    for (let i = 0; i < n; i++) {
+      const angle = (2 * Math.PI * i) / n;
+      const dxKm  = radius * Math.sin(angle);
+      const dyKm  = radius * Math.cos(angle);
+      points.push(offsetCoord(lat, lng, dxKm, dyKm));
+    }
+    return points;
+  }
+
+  async function fetchAQIBatch(points) {
+    // Fetch AQI for an array of {lat,lng} points in parallel, return same array
+    // with .aqi filled in (null on failure)
+    return Promise.all(points.map(async p => {
+      try {
+        const url = `https://air-quality-api.open-meteo.com/v1/air-quality` +
+                    `?latitude=${p.lat.toFixed(5)}&longitude=${p.lng.toFixed(5)}` +
+                    `&current=us_aqi&timezone=auto`;
+        const r = await fetch(url);
+        if (!r.ok) return { ...p, aqi: null };
+        const d = await r.json();
+        return { ...p, aqi: d.current?.us_aqi ?? null };
+      } catch { return { ...p, aqi: null }; }
+    }));
+  }
+
+  // Binary-search along the straight line between two coordinates to find the
+  // closest point that still reads AQI ≤ TARGET_AQI. Returns the qualifying point.
+  async function binarySearchEdge(qualPt, highPt, userLat, userLng, depth = 4) {
+    if (depth === 0) return qualPt;
+    const midLat = (qualPt.lat + highPt.lat) / 2;
+    const midLng = (qualPt.lng + highPt.lng) / 2;
+    const mid = { lat: midLat, lng: midLng };
+    try {
+      const url = `https://air-quality-api.open-meteo.com/v1/air-quality` +
+                  `?latitude=${midLat.toFixed(5)}&longitude=${midLng.toFixed(5)}` +
+                  `&current=us_aqi&timezone=auto`;
+      const r = await fetch(url);
+      const d = await r.json();
+      const aqi = d.current?.us_aqi ?? null;
+      mid.aqi = aqi;
+      if (aqi !== null && aqi <= TARGET_AQI) {
+        // Mid qualifies — search closer half (between user side and mid)
+        return binarySearchEdge(mid, qualPt, userLat, userLng, depth - 1);
+      } else {
+        // Mid doesn't qualify — search outer half (between mid and qualPt)
+        return binarySearchEdge(qualPt, mid, userLat, userLng, depth - 1);
+      }
+    } catch { return qualPt; }
+  }
+
+  async function findPlaceWithTargetAQI(userLat, userLng) {
+    const MAX_RINGS = 25; // ~375km max radius
+
+    for (let ring = 1; ring <= MAX_RINGS; ring++) {
+      const distKm = ring * STEP_KM;
+      const pct = Math.round((ring / MAX_RINGS) * 100);
+      setStatus(`SCANNING ${distKm}km RADIUS · ${pct}% · AQI ≤ ${TARGET_AQI}...`);
+
+      const points  = buildRing(userLat, userLng, ring);
+      const results = await fetchAQIBatch(points);
+      const valid   = results.filter(p => p.aqi !== null);
+
+      const qualifying = valid
+        .filter(p => p.aqi <= TARGET_AQI)
+        .map(p => ({ ...p, dist: haversine(userLat, userLng, p.lat, p.lng) }))
+        .sort((a, b) => a.dist - b.dist);
+
+      if (qualifying.length === 0) continue;
+
+      // Found qualifying points in this ring.
+      // Binary-search toward user to find the absolute nearest qualifying point.
+      setStatus(`PINPOINTING NEAREST CLEAN-AIR ZONE...`);
+      const nearest = qualifying[0];
+
+      // The "high" side (toward user, doesn't qualify) is the previous ring's
+      // corresponding direction at (ring-1) * STEP_KM, or just the user if ring=1
+      const prevDist  = (ring - 1) * STEP_KM;
+      const angle     = Math.atan2(nearest.lng - userLng, nearest.lat - userLat);
+      const highPoint = ring > 1
+        ? offsetCoord(userLat, userLng, Math.sin(angle) * prevDist, Math.cos(angle) * prevDist)
+        : { lat: userLat, lng: userLng };
+
+      const refined = await binarySearchEdge(nearest, highPoint, userLat, userLng, 4);
+      refined.dist  = haversine(userLat, userLng, refined.lat, refined.lng);
+      refined.name  = `Clean Air Zone · ${Math.round(refined.dist / 1000)}km`;
+      refined.aqi   = refined.aqi ?? nearest.aqi;
+
+      return refined;
+    }
+
+    console.warn('No zone with AQI ≤', TARGET_AQI, 'found within max radius');
+    return null;
+  }
+
+  // ── Draw map overlays ──
+  function drawOverlays(lat, lng, userAqi, park) {
+    const userCat = aqiCategory(userAqi);
+
+    // User marker
+    liveUserMarker = L.marker([lat, lng], { icon: userIcon }).addTo(map);
+    const userMarker = liveUserMarker;
+    userMarker.bindPopup(
+      `<span style="color:#00c8ff">📍 You are here</span><br>` +
+      `<span style="font-size:12px;color:${userCat.color}">AQI ${userAqi ?? '—'} · ${userCat.label}</span>`
+    );
+    setTimeout(startCompass, 300);
+
+    // AQI zone around user
+    const zoneColor  = userCat.color;
+    const zoneRadius = (userAqi ?? 0) > 150 ? 700 : (userAqi ?? 0) > 100 ? 500 : (userAqi ?? 0) > 50 ? 350 : 200;
+    L.circle([lat, lng], {
+      radius: zoneRadius, color: zoneColor, weight: 1.5, opacity: 0.85,
+      fillColor: zoneColor, fillOpacity: 0.1, dashArray: '6 4'
+    }).addTo(map).bindPopup(
+      `<span style="color:${zoneColor}">${userCat.emoji} ${userCat.label} Zone</span><br>` +
+      `<span style="font-size:12px;opacity:0.7">AQI ${userAqi ?? '—'} · Live</span>`
+    );
+
+    drawSafeZoneOverlays(lat, lng, userAqi, park);
+  }
+
+  async function drawSafeZoneOverlays(lat, lng, userAqi, park) {
+    if (!park) {
+      document.getElementById('szc-park-name').textContent = 'No Safe Zone Found';
+      document.getElementById('szc-park-name').style.color = '#ff4444';
+      document.getElementById('szc-aqi').textContent = '> 100';
+      document.getElementById('szc-aqi').style.color = '#ff4444';
+      document.getElementById('szc-aqi-cat').textContent = 'ALL ZONES HIGH';
+      document.getElementById('szc-dist').textContent = '—';
+      document.getElementById('safe-zone-card').querySelector('.szc-icon').textContent = '⚠️';
+      document.getElementById('safe-zone-card').style.borderColor = 'rgba(255,68,68,0.4)';
+      document.getElementById('szc-dir-block').style.display = 'none';
+      document.getElementById('szc-dir-divider').style.display = 'none';
+      setTimeout(() => document.getElementById('safe-zone-card').classList.add('visible'), 500);
+      return;
+    }
+
+    const safeCat = aqiCategory(park.aqi);
+    const realDist = haversine(lat, lng, park.lat, park.lng);
+
+    // Compute direction
+    const bearing = bearingBetween(lat, lng, park.lat, park.lng);
+    const dirLabel = bearingToDirection(bearing);
+
+    // Reverse geocode to get real place name
+    const placeName = await reverseGeocode(park.lat, park.lng);
+    const displayName = placeName || park.name;
+    park.name = displayName; // update for popup too
+
+    // Safe zone marker
+    const mapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${lat},${lng}&destination=${park.lat},${park.lng}&travelmode=driving`;
+    const safeMarker = L.marker([park.lat, park.lng], { icon: safeIcon }).addTo(map);
+    safeMarker.bindPopup(
+      `<span style="color:${safeCat.color}">${safeCat.emoji} ${displayName}</span><br>` +
+      `<span style="font-size:12px;opacity:0.7">AQI ${park.aqi ?? '—'} · ${safeCat.label}</span><br>` +
+      `<span style="font-size:11px;color:#00e87a">✅ Meets AQI ≤ ${TARGET_AQI} target</span><br>` +
+      `<span style="font-size:11px;color:#4a6680">📏 ${formatDistance(realDist).value} · ${dirLabel}</span><br>` +
+      `<a href="${mapsUrl}" target="_blank" style="font-size:11px;color:#00c8ff;text-decoration:none;">🗺️ Open in Google Maps →</a>`
+    );
+    _overlayMarkers.push(safeMarker);
+
+    // Bottom card
+    const fmt = formatDistance(realDist);
+    document.getElementById('szc-dist').textContent     = fmt.value;
+    document.getElementById('szc-dist-unit').textContent = 'FROM YOU';
+    document.getElementById('szc-park-name').textContent = displayName;
+    document.getElementById('szc-park-name').style.color = '';
+    updateSafeZoneCard(park.aqi);
+
+    // Direction block
+    document.getElementById('szc-dir').textContent = dirLabel;
+    document.getElementById('szc-dir-sub').textContent = `${Math.round(bearing)}°`;
+    document.getElementById('szc-dir-block').style.display = '';
+    document.getElementById('szc-dir-divider').style.display = '';
+
+    document.getElementById('safe-zone-card').style.borderColor = '';
+    document.getElementById('safe-zone-card').querySelector('.szc-icon').textContent = '🌿';
+    setTimeout(() => document.getElementById('safe-zone-card').classList.add('visible'), 500);
+
+    // Dashed nav line
+    const navLine = L.polyline([[lat, lng], [park.lat, park.lng]], {
+      color: '#ffe944', weight: 2.5, opacity: 0.85, dashArray: '10 8', lineCap: 'round'
+    }).addTo(map);
+    const navDot = L.circleMarker([park.lat, park.lng], {
+      radius: 4, color: '#ffe944', fillColor: '#ffe944', fillOpacity: 0.5, weight: 2
+    }).addTo(map);
+    _overlayMarkers.push(navLine, navDot);
+
+    // Zoom to fit both markers
+    map.fitBounds([[lat, lng], [park.lat, park.lng]], { padding: [80, 80] });
+  }
+
+  // ── Status overlay text helper ──
+  function setStatus(msg) {
+    document.querySelector('.locate-text').textContent = msg;
+  }
+
+  const overlay = document.getElementById('locate-overlay');
+
+  async function initMap(lat, lng, accuracyMeters) {
+    _userLat = lat;
+    _userLng = lng;
+    overlay.classList.add('hidden');
+    map.setView([lat, lng], 15);
+    updateAQIPanel(null);
+
+    // Show accuracy badge on status bar
+    if (accuracyMeters) {
+      document.getElementById('status-bar').innerHTML =
+        `<span class="status-dot"></span>LIVE · GPS ±${Math.round(accuracyMeters)}m`;
+    }
+
+    try {
+      setStatus('FETCHING YOUR AQI...');
+      const userAqi = await fetchAQI(lat, lng);
+      updateAQIPanel(userAqi);
+
+      setStatus('FINDING NEAREST PLACE WITH AQI ≤ 100...');
+      const bestPark = await findPlaceWithTargetAQI(lat, lng).catch(() => null);
+
+      drawOverlays(lat, lng, userAqi, bestPark);
+      scheduleAQIRefresh();
+
+    } catch (err) {
+      console.warn('Init failed:', err);
+      updateAQIPanel(null);
+      drawOverlays(lat, lng, null, null);
+    }
+  }
+
+  // ── GPS: use high-accuracy watchPosition so it refines over time ──
+  const overlay2 = document.getElementById('locate-overlay');
+  const FALLBACK = window._sharedFallback || { lat: 21.1458, lng: 79.0882 };
+  let gpsInitDone = false;
+
+  let liveUserMarker = null; // reference to the live-moving dot marker
+  let lastAccuracy = Infinity;
+  const GPS_GOOD_ACCURACY = 50;   // metres — consider this "good enough"
+  const GPS_WAIT_MS       = 8000; // max ms to wait for a good fix before accepting whatever we have
+  let gpsStartTime        = null;
+
+  function updateLiveDot(lat, lng, accuracy) {
+    _userLat = lat;
+    _userLng = lng;
+    if (!liveUserMarker) return;
+    liveUserMarker.setLatLng([lat, lng]);
+    if (accuracy) {
+      document.getElementById('status-bar').innerHTML =
+        `<span class="status-dot"></span>LIVE · GPS ±${Math.round(accuracy)}m`;
+    }
+  }
+
+  function startGPS() {
+    if (!('geolocation' in navigator)) {
+      initMap(FALLBACK.lat, FALLBACK.lng, null);
+      return;
+    }
+
+    gpsStartTime = Date.now();
+    setStatus('ACQUIRING GPS SIGNAL...');
+
+    // Fallback timer — if no good fix after GPS_WAIT_MS, use best available
+    let fallbackTimer = null;
+    let bestPos = null; // best position received so far
+
+    const watchId = navigator.geolocation.watchPosition(
+      pos => {
+        const { latitude, longitude, accuracy } = pos.coords;
+
+        // Always track the best (most accurate) fix received
+        if (!bestPos || accuracy < lastAccuracy) {
+          bestPos = pos;
+          lastAccuracy = accuracy;
+        }
+
+        if (!gpsInitDone) {
+          // Show live accuracy refinement in overlay
+          setStatus(`GPS SIGNAL ±${Math.round(accuracy)}m — REFINING...`);
+
+          // Accept immediately if accuracy is good, OR after wait timeout
+          const elapsed = Date.now() - gpsStartTime;
+          if (accuracy <= GPS_GOOD_ACCURACY || elapsed >= GPS_WAIT_MS) {
+            if (fallbackTimer) clearTimeout(fallbackTimer);
+            gpsInitDone = true;
+            initMap(latitude, longitude, accuracy);
+          } else if (!fallbackTimer) {
+            // Schedule a forced accept after GPS_WAIT_MS
+            fallbackTimer = setTimeout(() => {
+              if (!gpsInitDone && bestPos) {
+                gpsInitDone = true;
+                const { latitude: bLat, longitude: bLng, accuracy: bAcc } = bestPos.coords;
+                initMap(bLat, bLng, bAcc);
+              }
+            }, GPS_WAIT_MS - elapsed);
+          }
+        } else {
+          // Already initialised — just move the dot to the refined position
+          // Only update if this fix is meaningfully better or the user actually moved
+          updateLiveDot(latitude, longitude, accuracy);
+        }
+      },
+      err => {
+        console.warn('GPS error:', err.message);
+        if (fallbackTimer) clearTimeout(fallbackTimer);
+        if (!gpsInitDone) {
+          gpsInitDone = true;
+          // Use best received position if any, otherwise hardcoded fallback
+          if (bestPos) {
+            const { latitude, longitude, accuracy } = bestPos.coords;
+            initMap(latitude, longitude, accuracy);
+          } else {
+            initMap(FALLBACK.lat, FALLBACK.lng, null);
+          }
+        }
+      },
+      {
+        enableHighAccuracy: true, // Forces GPS chip, not IP or WiFi
+        timeout: 30000,           // Extended to give GPS chip time to lock
+        maximumAge: 0             // Never use cached position
+      }
+    );
+  }
+
+
+  // ════════════════════════════════════════════════════════
+  //  SMOOTH CANVAS AQI HEATMAP
+  //  Samples a grid of lat/lng points, fetches AQI for each,
+  //  then paints a smooth blended gradient using HTML5 Canvas
+  //  as a Leaflet overlay layer — exactly like Google Maps AQI.
+  //
+  //  Color scale:
+  //    0-50   → green   #00e87a
+  //    51-100 → yellow  #ffe944
+  //   101-150 → orange  #ff9500
+  //   151-200 → red     #ff4444
+  //   200+    → darkred #8b0000
+  // ════════════════════════════════════════════════════════
+
+  const HEATMAP_GRID = 12;
+  let heatmapEnabled = false;
+  let heatmapFetchCtrl = null;
+  let heatmapBoundsAtFetch = null;
+  let heatmapCache = {};           // key → results array (cache across pan/zoom)
+  let heatmapCanvasLayer = null;   // the Leaflet canvas overlay
+
+  // ── AQI color ramp — maps AQI value → [r, g, b] components ─────────────
+  // Uses a dense lookup table for sub-integer accuracy with zero branching.
+  const AQI_COLOR_STOPS = [
+    [0,   [0,   232, 122]],   // vivid green
+    [50,  [0,   232, 122]],
+    [75,  [180, 240,  60]],   // lime transition
+    [100, [255, 220,  40]],   // yellow
+    [125, [255, 160,  10]],   // amber
+    [150, [255,  90,  20]],   // orange-red
+    [175, [255,  50,  50]],   // red
+    [200, [220,  30,  80]],   // crimson
+    [250, [160,   0,  60]],   // deep rose
+    [300, [100,   0,   0]],   // maroon
+  ];
+
+  function aqiToRgb(aqi) {
+    if (aqi === null || aqi === undefined) return null;
+    const stops = AQI_COLOR_STOPS;
+    if (aqi <= stops[0][0]) return stops[0][1];
+    for (let i = 1; i < stops.length; i++) {
+      if (aqi <= stops[i][0]) {
+        const t = (aqi - stops[i-1][0]) / (stops[i][0] - stops[i-1][0]);
+        // Smooth-step easing so transitions feel more natural
+        const s = t * t * (3 - 2 * t);
+        const a = stops[i-1][1], b = stops[i][1];
+        return [
+          Math.round(a[0] + s * (b[0] - a[0])),
+          Math.round(a[1] + s * (b[1] - a[1])),
+          Math.round(a[2] + s * (b[2] - a[2])),
+        ];
+      }
+    }
+    return stops[stops.length - 1][1];
+  }
+
+  // ── Canvas Overlay Layer — TRUE BILINEAR INTERPOLATION ───────────────────
+  //
+  // Instead of drawing one blob per point (which causes visible halos where
+  // blobs meet), we:
+  //   1. Build a sparse AQI grid in lat/lng space
+  //   2. For EVERY pixel on the canvas, inverse-project to lat/lng, then
+  //      bilinearly interpolate the AQI value from the 4 nearest grid cells
+  //   3. Map that interpolated AQI to an RGB color
+  //   4. Write the pixel directly via ImageData
+  //
+  // This produces a perfectly smooth, continuous gradient — exactly like
+  // Google Maps / Windy weather overlays. No blobs, no seams, no halos.
+  //
+  // Performance: we render at 1/4 resolution (every 4th pixel) then use
+  // CSS scaling, keeping it fast even on large screens.
+  // ─────────────────────────────────────────────────────────────────────────
+  function createCanvasLayer() {
+    const CanvasOverlay = L.Layer.extend({
+      onAdd(map) {
+        this._map = map;
+        const pane = map.getPanes().overlayPane;
+        this._canvas = document.createElement('canvas');
+        this._canvas.style.cssText = 'position:absolute;top:0;left:0;pointer-events:none;z-index:200;image-rendering:auto;filter:blur(2px);';
+        pane.appendChild(this._canvas);
+        map.on('movestart zoomstart', this._hide, this);
+        map.on('moveend zoomend', this._reposition, this);
+        this._reposition();
+      },
+      onRemove(map) {
+        this._canvas.remove();
+        map.off('movestart zoomstart', this._hide, this);
+        map.off('moveend zoomend', this._reposition, this);
+      },
+      _hide() {
+        this._canvas.style.transition = 'opacity 0.15s';
+        this._canvas.style.opacity = '0';
+      },
+      _reposition() {
+        const size = this._map.getSize();
+        // CSS size = full viewport; canvas resolution = 1/4 for performance
+        this._canvas.style.width  = size.x + 'px';
+        this._canvas.style.height = size.y + 'px';
+        this._canvas.width  = Math.ceil(size.x / 4);
+        this._canvas.height = Math.ceil(size.y / 4);
+        this._canvas.style.opacity = '1';
+        this._canvas.style.transition = 'opacity 0.4s';
+        if (this._data) this._draw(this._data);
+      },
+      setData(points) {
+        this._data = points;
+        this._draw(points);
+      },
+
+      _draw(points) {
+        const canvas  = this._canvas;
+        const W = canvas.width;
+        const H = canvas.height;
+        const ctx = canvas.getContext('2d');
+        const map = this._map;
+
+        // Filter to valid points only
+        const valid = points.filter(p => p.aqi !== null && p.aqi !== undefined);
+        if (valid.length === 0) { ctx.clearRect(0, 0, W, H); return; }
+
+        // ── Step 1: Build a grid of pixel-space coordinates ──────────────
+        // Project every grid point from lat/lng → canvas pixel space (at 1/4 res)
+        const SCALE = 4; // we're working at 1/4 resolution
+        const projected = valid.map(p => {
+          const cp = map.latLngToContainerPoint([p.lat, p.lng]);
+          return { px: cp.x / SCALE, py: cp.y / SCALE, aqi: p.aqi };
+        });
+
+        // ── Step 2: Build a KD-lite: for each pixel use IDW interpolation ──
+        // Inverse Distance Weighting (IDW) with power=2 — gives very smooth
+        // transitions, better than bilinear for irregular grids.
+        // We downsample further with a step of 1 (every pixel at 1/4 res).
+
+        // Precompute AQI RGB for each valid point (avoid recomputing per pixel)
+        const pointColors = projected.map(p => ({ ...p, rgb: aqiToRgb(p.aqi) }));
+
+        const imageData = ctx.createImageData(W, H);
+        const data = imageData.data;
+
+        // Determine a reasonable search radius in pixel space
+        // Use the average spacing between grid points as the influence radius,
+        // multiplied by a generous factor to ensure full coverage
+        const bounds = map.getBounds();
+        const sw = bounds.getSouthWest();
+        const ne = bounds.getNorthEast();
+        const latRange = ne.lat - sw.lat;
+        const latStep  = latRange / HEATMAP_GRID;
+        const pxPerDeg = (H * SCALE) / latRange;
+        // Influence radius = 1.5× grid cell spacing (in 1/4-res pixels)
+        const influenceR  = Math.max(20, (latStep * pxPerDeg * 1.8) / SCALE);
+        const influenceR2 = influenceR * influenceR;
+
+        for (let py = 0; py < H; py++) {
+          for (let px = 0; px < W; px++) {
+            // IDW: weighted sum of nearby AQI values
+            let wSum = 0, rSum = 0, gSum = 0, bSum = 0;
+            let anyHit = false;
+
+            for (const pc of pointColors) {
+              const dx = px - pc.px;
+              const dy = py - pc.py;
+              const d2 = dx * dx + dy * dy;
+              if (d2 > influenceR2) continue; // outside influence radius
+              anyHit = true;
+              // w = 1/d^2 (IDW power=2), with epsilon to avoid infinity at d=0
+              const w = 1 / (d2 + 0.5);
+              wSum += w;
+              rSum += w * pc.rgb[0];
+              gSum += w * pc.rgb[1];
+              bSum += w * pc.rgb[2];
+            }
+
+            if (!anyHit) continue; // leave fully transparent
+
+            const i = (py * W + px) * 4;
+            data[i    ] = Math.round(rSum / wSum);
+            data[i + 1] = Math.round(gSum / wSum);
+            data[i + 2] = Math.round(bSum / wSum);
+            data[i + 3] = 130; // ~51% opacity — tweak here for density
+          }
+        }
+
+        ctx.putImageData(imageData, 0, 0);
+      }
+    });
+    return new CanvasOverlay();
+  }
+
+  function heatmapBoundsKey(bounds) {
+    const sw = bounds.getSouthWest();
+    const ne = bounds.getNorthEast();
+    return [sw.lat, sw.lng, ne.lat, ne.lng].map(v => Math.round(v * 40) / 40).join(',');
+  }
+
+  async function renderHeatmap() {
+    if (!heatmapEnabled) return;
+
+    const bounds = map.getBounds();
+    const key = heatmapBoundsKey(bounds);
+
+    // Use cached data if available — just redraw
+    if (heatmapCache[key]) {
+      if (heatmapCanvasLayer) heatmapCanvasLayer.setData(heatmapCache[key]);
+      return;
+    }
+
+    if (heatmapFetchCtrl) heatmapFetchCtrl.abort();
+    heatmapFetchCtrl = new AbortController();
+    heatmapBoundsAtFetch = key;
+
+    const statusEl = document.getElementById('heatmap-status');
+    statusEl.classList.add('visible');
+
+    const sw = bounds.getSouthWest();
+    const ne = bounds.getNorthEast();
+    const latRange = ne.lat - sw.lat;
+    const lngRange = ne.lng - sw.lng;
+
+    const aspect = lngRange / latRange;
+    const rows = HEATMAP_GRID;
+    const cols = Math.max(4, Math.round(rows * aspect));
+
+    const latStep = latRange / rows;
+    const lngStep = lngRange / cols;
+
+    const points = [];
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        points.push({
+          lat: sw.lat + (r + 0.5) * latStep,
+          lng: sw.lng + (c + 0.5) * lngStep
+        });
+      }
+    }
+
+    const BATCH = 16;
+    const results = [];
+    try {
+      for (let i = 0; i < points.length; i += BATCH) {
+        if (!heatmapEnabled) break;
+        const batch = points.slice(i, i + BATCH);
+        const fetched = await Promise.all(batch.map(async p => {
+          try {
+            const url = `https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${p.lat.toFixed(4)}&longitude=${p.lng.toFixed(4)}&current=us_aqi&timezone=auto`;
+            const res = await fetch(url, { signal: heatmapFetchCtrl.signal });
+            if (!res.ok) return { ...p, aqi: null };
+            const d = await res.json();
+            return { ...p, aqi: d.current?.us_aqi ?? null };
+          } catch { return { ...p, aqi: null }; }
+        }));
+        results.push(...fetched);
+        // Progressive render — paint what we have so far
+        statusEl.textContent = `SAMPLING AQI… ${Math.min(results.length, points.length)}/${points.length}`;
+        if (heatmapCanvasLayer) heatmapCanvasLayer.setData(results);
+      }
+    } catch (e) {
+      statusEl.classList.remove('visible');
+      return;
+    }
+
+    // Final paint & cache
+    if (heatmapBoundsKey(map.getBounds()) === key) {
+      heatmapCache[key] = results;
+      if (heatmapCanvasLayer) heatmapCanvasLayer.setData(results);
+    }
+
+    const valid = results.filter(r => r.aqi !== null).length;
+    statusEl.textContent = `AQI GRADIENT · ${valid} POINTS`;
+    setTimeout(() => statusEl.classList.remove('visible'), 2500);
+  }
+
+  function toggleHeatmap() {
+    heatmapEnabled = !heatmapEnabled;
+    const btn = document.getElementById('heatmap-toggle');
+    const lbl = document.getElementById('heatmap-label');
+    if (heatmapEnabled) {
+      btn.classList.add('active');
+      lbl.textContent = 'AQI ON';
+      if (!heatmapCanvasLayer) {
+        heatmapCanvasLayer = createCanvasLayer();
+        heatmapCanvasLayer.addTo(map);
+      }
+      renderHeatmap();
+    } else {
+      btn.classList.remove('active');
+      lbl.textContent = 'AQI MAP';
+      if (heatmapCanvasLayer) {
+        map.removeLayer(heatmapCanvasLayer);
+        heatmapCanvasLayer = null;
+      }
+      heatmapBoundsAtFetch = null;
+      if (heatmapFetchCtrl) heatmapFetchCtrl.abort();
+      document.getElementById('heatmap-status').classList.remove('visible');
+    }
+  }
+
+  // Re-render heatmap when map is moved/zoomed (debounced)
+  let heatmapDebounce = null;
+  map.on('moveend zoomend', () => {
+    if (!heatmapEnabled) return;
+    clearTimeout(heatmapDebounce);
+    heatmapDebounce = setTimeout(renderHeatmap, 500);
+  });
+
+  // ════════════════════════════════════════════════════════
+  //  REVERSE GEOCODING — Nominatim (OSM, no key needed)
+  //  Returns a human-readable place name for a coordinate.
+  // ════════════════════════════════════════════════════════
+  async function reverseGeocode(lat, lng) {
+    try {
+      const url = `https://nominatim.openstreetmap.org/reverse?lat=${lat.toFixed(5)}&lon=${lng.toFixed(5)}&format=json&zoom=10&accept-language=en`;
+      const res = await fetch(url, { headers: { 'Accept-Language': 'en' } });
+      if (!res.ok) return null;
+      const d = await res.json();
+      // Prefer city/town/village → state → country
+      const a = d.address || {};
+      return a.city || a.town || a.village || a.county || a.state_district || a.state || d.display_name?.split(',')[0] || null;
+    } catch { return null; }
+  }
+
+  // ════════════════════════════════════════════════════════
+  //  COMPASS BEARING → readable direction label
+  // ════════════════════════════════════════════════════════
+  function bearingToDirection(deg) {
+    const dirs = ['N','NE','E','SE','S','SW','W','NW'];
+    return dirs[Math.round(deg / 45) % 8];
+  }
+
+  function bearingBetween(lat1, lng1, lat2, lng2) {
+    const toRad = x => x * Math.PI / 180;
+    const dLng = toRad(lng2 - lng1);
+    const y = Math.sin(dLng) * Math.cos(toRad(lat2));
+    const x = Math.cos(toRad(lat1)) * Math.sin(toRad(lat2)) -
+              Math.sin(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.cos(dLng);
+    return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+  }
+
+  // ════════════════════════════════════════════════════════
+  //  AQI AUTO-REFRESH — refreshes user's own AQI every 5min
+  // ════════════════════════════════════════════════════════
+  let _userLat = null, _userLng = null;
+
+  function scheduleAQIRefresh() {
+    setInterval(async () => {
+      if (_userLat === null) return;
+      try {
+        const aqi = await fetchAQI(_userLat, _userLng);
+        updateAQIPanel(aqi);
+      } catch {}
+    }, 5 * 60 * 1000);
+  }
+
+  // ════════════════════════════════════════════════════════
+  //  REFRESH RECOMMENDATION on-demand
+  // ════════════════════════════════════════════════════════
+  let _overlayMarkers = []; // track drawnoverlay layers for removal on refresh
+  let _refreshRunning = false;
+
+  async function refreshRecommendation() {
+    if (_refreshRunning || _userLat === null) return;
+    _refreshRunning = true;
+    const btn = document.getElementById('szc-refresh');
+    btn.textContent = '⏳ SCANNING...';
+    btn.style.color = 'var(--accent-blue)';
+    btn.style.borderColor = 'var(--accent-blue)';
+
+    // Remove old safe-zone overlays (marker, nav line, circle marker)
+    _overlayMarkers.forEach(l => { try { map.removeLayer(l); } catch {} });
+    _overlayMarkers = [];
+
+    // Reset card
+    document.getElementById('safe-zone-card').classList.remove('visible');
+    document.getElementById('szc-park-name').textContent = 'Searching...';
+    document.getElementById('szc-aqi').textContent = '—';
+    document.getElementById('szc-dist').textContent = '—';
+
+    try {
+      const userAqi = await fetchAQI(_userLat, _userLng);
+      updateAQIPanel(userAqi);
+      const bestPark = await findPlaceWithTargetAQI(_userLat, _userLng).catch(() => null);
+      drawSafeZoneOverlays(_userLat, _userLng, userAqi, bestPark);
+    } catch {}
+
+    btn.textContent = '🔄 REFRESH';
+    btn.style.color = '';
+    btn.style.borderColor = '';
+    _refreshRunning = false;
+  }
+
+  startGPS();
+
+  // ════════════════════════════════════════════════════════
+  //  OPEN-METEO HOURLY FETCH (history + forecast)
+  //  Returns array of { time: Date, aqi: number }
+  // ════════════════════════════════════════════════════════
+  async function fetchHourlyAQI(lat, lng, mode) {
+    // mode: 'history' = past 24h, 'today' = today midnight→now+future, 'forecast' = 5 days
+    let url;
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'auto';
+    if (mode === 'forecast') {
+      url = `https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${lat}&longitude=${lng}&hourly=us_aqi&timezone=${encodeURIComponent(tz)}&forecast_days=5`;
+    } else {
+      url = `https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${lat}&longitude=${lng}&hourly=us_aqi&timezone=${encodeURIComponent(tz)}&past_days=1&forecast_days=1`;
+    }
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('Hourly AQI fetch failed');
+    const d = await res.json();
+    const times = d.hourly?.time ?? [];
+    const aqis  = d.hourly?.us_aqi ?? [];
+    return times.map((t, i) => ({ time: new Date(t), aqi: aqis[i] })).filter(x => x.aqi !== null);
+  }
+
+  // ════════════════════════════════════════════════════════
+  //  AQI SPARKLINE  (24h mini-chart in the AQI panel)
+  // ════════════════════════════════════════════════════════
+  let _sparklineData = [];
+
+  async function loadSparkline(lat, lng) {
+    try {
+      const data = await fetchHourlyAQI(lat, lng, 'history');
+      if (!data.length) return;
+      _sparklineData = data;
+      // Only show last 24 data points
+      const slice = data.slice(-24);
+      drawSparkline(slice);
+
+      // Trend label
+      if (slice.length >= 2) {
+        const first = slice[0].aqi, last = slice[slice.length-1].aqi;
+        const diff = last - first;
+        const trendEl = document.getElementById('aqi-trend-label');
+        const cat = aqiCategory(last);
+        trendEl.style.color = cat.color;
+        if (diff > 5) trendEl.textContent = `▲ +${diff} WORSENING`;
+        else if (diff < -5) trendEl.textContent = `▼ ${diff} IMPROVING`;
+        else trendEl.textContent = `→ STABLE`;
+      }
+      document.getElementById('aqi-sparkline-wrap').style.display = 'block';
+    } catch {}
+  }
+
+  function drawSparkline(data) {
+    const canvas = document.getElementById('aqi-sparkline');
+    const W = canvas.offsetWidth || 130;
+    const H = 36;
+    canvas.width = W * 2; canvas.height = H * 2;
+    canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+    const ctx = canvas.getContext('2d');
+    ctx.scale(2,2);
+    ctx.clearRect(0,0,W,H);
+    if (!data.length) return;
+
+    const aqis = data.map(d => d.aqi);
+    const minV = Math.min(...aqis, 0);
+    const maxV = Math.max(...aqis, 50);
+    const range = maxV - minV || 1;
+
+    const pts = data.map((d, i) => ({
+      x: (i / (data.length - 1)) * (W - 4) + 2,
+      y: H - 4 - ((d.aqi - minV) / range) * (H - 8)
+    }));
+
+    // Gradient fill under line
+    const grad = ctx.createLinearGradient(0, 0, 0, H);
+    const lastRgb = aqiToRgb(aqis[aqis.length-1]);
+    if (lastRgb) {
+      grad.addColorStop(0, `rgba(${lastRgb.join(',')},0.35)`);
+      grad.addColorStop(1, `rgba(${lastRgb.join(',')},0.02)`);
+    }
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, H);
+    pts.forEach(p => ctx.lineTo(p.x, p.y));
+    ctx.lineTo(pts[pts.length-1].x, H);
+    ctx.closePath();
+    ctx.fillStyle = grad;
+    ctx.fill();
+
+    // Line stroke — color-coded per segment
+    for (let i = 1; i < pts.length; i++) {
+      const rgb = aqiToRgb(data[i].aqi);
+      if (!rgb) continue;
+      ctx.beginPath();
+      ctx.moveTo(pts[i-1].x, pts[i-1].y);
+      ctx.lineTo(pts[i].x, pts[i].y);
+      ctx.strokeStyle = `rgb(${rgb.join(',')})`;
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    }
+
+    // Current point dot
+    const last = pts[pts.length-1];
+    const dotRgb = aqiToRgb(aqis[aqis.length-1]);
+    if (dotRgb) {
+      ctx.beginPath();
+      ctx.arc(last.x, last.y, 2.5, 0, Math.PI*2);
+      ctx.fillStyle = `rgb(${dotRgb.join(',')})`;
+      ctx.fill();
+    }
+  }
+
+  // ════════════════════════════════════════════════════════
+  //  TIMELINE / FORECAST PANEL
+  // ════════════════════════════════════════════════════════
+  let _timelineMode = 'history';
+  let _timelineData = [];
+  let _timelineVisible = false;
+
+  function toggleTimeline() {
+    _timelineVisible = !_timelineVisible;
+    const panel = document.getElementById('timeline-panel');
+    const btn   = document.getElementById('timeline-toggle');
+    panel.classList.toggle('visible', _timelineVisible);
+    btn.classList.toggle('active', _timelineVisible);
+    if (_timelineVisible && _userLat !== null) loadTimeline(_timelineMode);
+  }
+
+  function setTimelineMode(mode) {
+    _timelineMode = mode;
+    document.querySelectorAll('.tl-tab').forEach((t,i) => {
+      t.classList.toggle('active', ['history','today','forecast'][i] === mode);
+    });
+    const titles = { history: 'PAST 24H AQI', today: "TODAY'S AQI", forecast: '5-DAY AQI FORECAST' };
+    document.getElementById('tl-title-label').textContent = titles[mode];
+    if (_userLat !== null) loadTimeline(mode);
+  }
+
+  async function loadTimeline(mode) {
+    if (_userLat === null) return;
+    const slider = document.getElementById('tl-slider');
+    slider.disabled = true;
+    document.getElementById('tl-aqi-now').textContent = 'LOADING…';
+    try {
+      let data = await fetchHourlyAQI(_userLat, _userLng, mode);
+      if (mode === 'history') {
+        const now = Date.now();
+        data = data.filter(d => d.time.getTime() <= now).slice(-24);
+      } else if (mode === 'today') {
+        const midnight = new Date(); midnight.setHours(0,0,0,0);
+        data = data.filter(d => d.time >= midnight).slice(0, 48);
+      } else {
+        data = data.slice(0, 120);
+      }
+      _timelineData = data;
+      slider.max = Math.max(0, data.length - 1);
+      slider.value = slider.max;
+      drawTimelineChart(data);
+      onTimelineSlider(slider.value);
+    } catch {
+      document.getElementById('tl-aqi-now').textContent = 'ERROR';
+    }
+    slider.disabled = false;
+  }
+
+  function drawTimelineChart(data) {
+    const canvas = document.getElementById('tl-canvas');
+    const W = canvas.offsetWidth || 320;
+    const H = 80;
+    canvas.width = W * 2; canvas.height = H * 2;
+    canvas.style.height = H + 'px';
+    const ctx = canvas.getContext('2d');
+    ctx.scale(2,2);
+    ctx.clearRect(0,0,W,H);
+    if (!data.length) return;
+
+    const aqis = data.map(d => d.aqi);
+    const minV = 0, maxV = Math.max(...aqis, 100);
+    const range = maxV - minV || 1;
+
+    const xOf = i => (i / (data.length - 1)) * (W - 8) + 4;
+    const yOf = v => H - 6 - ((v - minV) / range) * (H - 14);
+
+    // AQI band shading 0-50 / 51-100 / 101+
+    const bands = [[0,50,'rgba(0,232,122,0.06)'],[50,100,'rgba(255,220,40,0.06)'],[100,maxV+20,'rgba(255,68,68,0.06)']];
+    bands.forEach(([lo,hi,col]) => {
+      if (hi < minV || lo > maxV) return;
+      ctx.fillStyle = col;
+      ctx.fillRect(0, yOf(Math.min(hi, maxV+20)), W, yOf(Math.max(lo, 0)) - yOf(Math.min(hi, maxV+20)));
+    });
+
+    // 100 threshold line
+    if (maxV >= 100) {
+      ctx.beginPath();
+      ctx.setLineDash([4,4]);
+      ctx.moveTo(0, yOf(100)); ctx.lineTo(W, yOf(100));
+      ctx.strokeStyle = 'rgba(255,68,68,0.3)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    // Area fill
+    const grad = ctx.createLinearGradient(0,0,0,H);
+    const midRgb = aqiToRgb(aqis[Math.floor(aqis.length/2)]);
+    if (midRgb) {
+      grad.addColorStop(0, `rgba(${midRgb.join(',')},0.25)`);
+      grad.addColorStop(1, `rgba(${midRgb.join(',')},0.01)`);
+    }
+    ctx.beginPath();
+    ctx.moveTo(xOf(0), H);
+    data.forEach((d,i) => ctx.lineTo(xOf(i), yOf(d.aqi)));
+    ctx.lineTo(xOf(data.length-1), H);
+    ctx.closePath();
+    ctx.fillStyle = grad;
+    ctx.fill();
+
+    // Color line
+    for (let i = 1; i < data.length; i++) {
+      const rgb = aqiToRgb(data[i].aqi);
+      if (!rgb) continue;
+      ctx.beginPath();
+      ctx.moveTo(xOf(i-1), yOf(data[i-1].aqi));
+      ctx.lineTo(xOf(i), yOf(data[i].aqi));
+      ctx.strokeStyle = `rgb(${rgb.join(',')})`;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+
+    // Hover interaction
+    canvas.onmousemove = e => {
+      const rect = canvas.getBoundingClientRect();
+      const mx = (e.clientX - rect.left) / rect.width;
+      const idx = Math.max(0, Math.min(data.length-1, Math.round(mx * (data.length-1))));
+      const d = data[idx];
+      if (!d) return;
+      const tip = document.getElementById('tl-tooltip');
+      const cat = aqiCategory(d.aqi);
+      const label = d.time.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:false}) +
+        ' · AQI ' + d.aqi + ' · ' + cat.label;
+      tip.textContent = label;
+      tip.style.color = cat.color;
+      tip.style.left = Math.min(e.clientX - rect.left, rect.width - 180) + 'px';
+      tip.style.top = '0px';
+      tip.classList.add('visible');
+
+      // Move slider to match
+      document.getElementById('tl-slider').value = idx;
+      onTimelineSlider(idx, false);
+    };
+    canvas.onmouseleave = () => {
+      document.getElementById('tl-tooltip').classList.remove('visible');
+    };
+  }
+
+  function onTimelineSlider(idx, redrawCanvas = true) {
+    idx = parseInt(idx);
+    if (!_timelineData.length) return;
+    const d = _timelineData[Math.min(idx, _timelineData.length-1)];
+    if (!d) return;
+    const cat = aqiCategory(d.aqi);
+    const isNow = idx >= _timelineData.length - 1 && _timelineMode !== 'forecast';
+    const timeStr = isNow ? 'NOW' : d.time.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:false});
+    const dateStr = d.time.toLocaleDateString('en-US',{month:'short',day:'numeric'});
+    document.getElementById('tl-time-label').textContent = (_timelineMode === 'forecast' ? dateStr + ' ' : '') + timeStr;
+    document.getElementById('tl-aqi-now').textContent = `AQI ${d.aqi}`;
+    document.getElementById('tl-aqi-now').style.color = cat.color;
+
+    // Paint scrubber line on canvas
+    if (redrawCanvas) {
+      drawTimelineChart(_timelineData);
+      const canvas = document.getElementById('tl-canvas');
+      const W = canvas.offsetWidth || 320;
+      const ctx = canvas.getContext('2d');
+      const x = (idx / (_timelineData.length-1)) * (W - 8) + 4;
+      ctx.save();
+      ctx.scale(2,2);
+      ctx.beginPath();
+      ctx.moveTo(x, 0); ctx.lineTo(x, 80);
+      ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([3,3]);
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  // ════════════════════════════════════════════════════════
+  //  WIND LAYER — animated wind arrows using Open-Meteo
+  // ════════════════════════════════════════════════════════
+  let windEnabled = false;
+  let windLayers = [];
+  let windAnimFrame = null;
+
+  function toggleWind() {
+    windEnabled = !windEnabled;
+    const btn = document.getElementById('wind-toggle');
+    btn.classList.toggle('active', windEnabled);
+    document.getElementById('wind-label').textContent = windEnabled ? 'WIND ON' : 'WIND';
+    if (windEnabled) renderWindLayer();
+    else clearWindLayer();
+  }
+
+  function clearWindLayer() {
+    windLayers.forEach(l => { try { map.removeLayer(l); } catch {} });
+    windLayers = [];
+    if (windAnimFrame) { cancelAnimationFrame(windAnimFrame); windAnimFrame = null; }
+  }
+
+  async function renderWindLayer() {
+    clearWindLayer();
+    const bounds = map.getBounds();
+    const sw = bounds.getSouthWest(), ne = bounds.getNorthEast();
+    const GRID = 6;
+    const latStep = (ne.lat - sw.lat) / GRID;
+    const lngStep = (ne.lng - sw.lng) / GRID;
+    const points = [];
+    for (let r = 0; r <= GRID; r++)
+      for (let c = 0; c <= GRID; c++)
+        points.push({ lat: sw.lat + r*latStep, lng: sw.lng + c*lngStep });
+
+    const windData = await Promise.all(points.map(async p => {
+      try {
+        const url = `https://api.open-meteo.com/v1/forecast?latitude=${p.lat.toFixed(3)}&longitude=${p.lng.toFixed(3)}&current=wind_speed_10m,wind_direction_10m&wind_speed_unit=ms`;
+        const r = await fetch(url);
+        if (!r.ok) return null;
+        const d = await r.json();
+        return { lat: p.lat, lng: p.lng, speed: d.current?.wind_speed_10m ?? 0, dir: d.current?.wind_direction_10m ?? 0 };
+      } catch { return null; }
+    }));
+
+    if (!windEnabled) return;
+
+    windData.filter(Boolean).forEach(w => {
+      const arrowHtml = buildWindArrow(w.speed, w.dir);
+      const icon = L.divIcon({ className: '', html: arrowHtml, iconSize: [40,40], iconAnchor: [20,20] });
+      const m = L.marker([w.lat, w.lng], { icon, interactive: false });
+      m.addTo(map);
+      windLayers.push(m);
+    });
+  }
+
+  function buildWindArrow(speed, dir) {
+    const len = Math.max(8, Math.min(22, speed * 2.5));
+    const opacity = Math.max(0.3, Math.min(1, speed / 10));
+    // Blue-white color scaled by speed
+    const intensity = Math.min(255, Math.round(speed * 20));
+    const col = `rgba(${100+intensity},${180+Math.round(intensity*0.3)},255,${opacity})`;
+    return `<svg width="40" height="40" viewBox="-20 -20 40 40" style="transform:rotate(${dir}deg);overflow:visible">
+      <defs>
+        <marker id="ah${Math.round(dir)}" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto">
+          <path d="M0,0 L6,3 L0,6 Z" fill="${col}"/>
+        </marker>
+      </defs>
+      <line x1="0" y1="${len/2}" x2="0" y2="${-len/2}" stroke="${col}" stroke-width="1.5" marker-end="url(#ah${Math.round(dir)})"/>
+      <circle cx="0" cy="${len/2}" r="1.5" fill="${col}"/>
+    </svg>`;
+  }
+
+  let windDebounce = null;
+  map.on('moveend zoomend', () => {
+    if (!windEnabled) return;
+    clearTimeout(windDebounce);
+    windDebounce = setTimeout(renderWindLayer, 800);
+  });
+
+  // ════════════════════════════════════════════════════════
+  //  CONTOUR LINES — iso-AQI lines at 50, 100, 150
+  // ════════════════════════════════════════════════════════
+  let contourLayers = [];
+
+  function clearContours() {
+    contourLayers.forEach(l => { try { map.removeLayer(l); } catch {} });
+    contourLayers = [];
+  }
+
+  // Marching squares implementation for contour extraction
+  function marchingSquaresContours(grid, rows, cols, threshold) {
+    const lines = [];
+    // Edge tables for marching squares
+    for (let r = 0; r < rows-1; r++) {
+      for (let c = 0; c < cols-1; c++) {
+        const tl = grid[r][c], tr = grid[r][c+1];
+        const bl = grid[r+1][c], br = grid[r+1][c+1];
+        if ([tl,tr,bl,br].some(v => v === null)) continue;
+        const bits = ((tl >= threshold)?8:0)|((tr >= threshold)?4:0)|((br >= threshold)?2:0)|((bl >= threshold)?1:0);
+        if (bits === 0 || bits === 15) continue;
+        // Interpolate edge crossings
+        const lerp = (a,b) => (threshold-a)/(b-a);
+        const top    = { r: r,   c: c + lerp(tl,tr) };
+        const right  = { r: r + lerp(tr,br), c: c+1 };
+        const bottom = { r: r+1, c: c + lerp(bl,br) };
+        const left   = { r: r + lerp(tl,bl), c: c   };
+        const edges = {1:[bottom,left],2:[right,bottom],3:[right,left],4:[top,right],
+                       5:[[top,left],[right,bottom]],6:[top,bottom],7:[top,left],
+                       8:[left,top],9:[bottom,top],10:[[left,bottom],[top,right]],
+                       11:[right,top],12:[left,right],13:[bottom,right],14:[left,bottom]};
+        const e = edges[bits]; if (!e) continue;
+        const segs = Array.isArray(e[0]) ? e : [e];
+        segs.forEach(([a,b]) => lines.push([a,b]));
+      }
+    }
+    return lines;
+  }
+
+  function drawContours(results) {
+    clearContours();
+    if (!results || results.length < 4) return;
+
+    // Build a lat/lng bounding box and determine grid dimensions
+    const lats = [...new Set(results.map(p => p.lat))].sort((a,b)=>a-b);
+    const lngs = [...new Set(results.map(p => p.lng))].sort((a,b)=>a-b);
+    if (lats.length < 2 || lngs.length < 2) return;
+
+    const rows = lats.length, cols = lngs.length;
+    const grid = Array.from({length: rows}, () => Array(cols).fill(null));
+    results.forEach(p => {
+      const ri = lats.indexOf(p.lat), ci = lngs.indexOf(p.lng);
+      if (ri >= 0 && ci >= 0) grid[ri][ci] = p.aqi;
+    });
+
+    const thresholds = [
+      { val: 50,  color: '#00e87a', label: 'AQI 50'  },
+      { val: 100, color: '#ffe944', label: 'AQI 100' },
+      { val: 150, color: '#ff5a14', label: 'AQI 150' },
+    ];
+
+    thresholds.forEach(({val, color, label}) => {
+      const lines = marchingSquaresContours(grid, rows, cols, val);
+      lines.forEach(([a,b]) => {
+        const latA = lats[0] + (a.r / (rows-1)) * (lats[rows-1]-lats[0]);
+        const lngA = lngs[0] + (a.c / (cols-1)) * (lngs[cols-1]-lngs[0]);
+        const latB = lats[0] + (b.r / (rows-1)) * (lats[rows-1]-lats[0]);
+        const lngB = lngs[0] + (b.c / (cols-1)) * (lngs[cols-1]-lngs[0]);
+        const line = L.polyline([[latA,lngA],[latB,lngB]], {
+          color, weight: 1.5, opacity: 0.7, dashArray: null
+        });
+        line.bindTooltip(label, { sticky: true, className: 'contour-tip', direction: 'top' });
+        line.addTo(map);
+        contourLayers.push(line);
+      });
+    });
+  }
+
+  // ════════════════════════════════════════════════════════
+  //  HEATMAP PULSE ANIMATION
+  // ════════════════════════════════════════════════════════
+  function applyHeatmapPulse(canvas, enable) {
+    if (!canvas) return;
+    if (enable) canvas.classList.add('heatmap-canvas-breathing');
+    else canvas.classList.remove('heatmap-canvas-breathing');
+  }
+
+  // Patch toggleHeatmap to apply pulse + draw contours after data arrives
+  const _origToggleHeatmap = toggleHeatmap;
+  // We'll intercept heatmapCanvasLayer creation below by patching setData
+
+  // ════════════════════════════════════════════════════════
+  //  WEB NOTIFICATIONS — alert when AQI > 100
+  // ════════════════════════════════════════════════════════
+  let _aqiAlertEnabled = false;
+  let _lastAlertAQI = null;
+
+  async function toggleAQIAlert() {
+    if (_aqiAlertEnabled) {
+      _aqiAlertEnabled = false;
+      document.getElementById('notify-btn').classList.remove('active');
+      document.getElementById('notify-btn').textContent = '🔔 ALERT';
+      return;
+    }
+    if ('Notification' in window) {
+      const perm = await Notification.requestPermission();
+      if (perm === 'granted') {
+        _aqiAlertEnabled = true;
+        document.getElementById('notify-btn').classList.add('active');
+        document.getElementById('notify-btn').textContent = '🔕 ALERT ON';
+      } else {
+        document.getElementById('notify-btn').textContent = '⛔ BLOCKED';
+        setTimeout(() => { document.getElementById('notify-btn').textContent = '🔔 ALERT'; }, 3000);
+      }
+    } else {
+      document.getElementById('notify-btn').textContent = '⛔ N/A';
+      setTimeout(() => { document.getElementById('notify-btn').textContent = '🔔 ALERT'; }, 3000);
+    }
+  }
+
+  function checkAQIAlert(aqi) {
+    if (!_aqiAlertEnabled || aqi === null) return;
+    if (aqi > 100 && (_lastAlertAQI === null || _lastAlertAQI <= 100)) {
+      new Notification('⚠️ OxyTrace Air Quality Alert', {
+        body: `AQI at your location is now ${aqi} — ${aqiCategory(aqi).label}. Consider moving to a cleaner area.`,
+        icon: 'https://cdn-icons-png.flaticon.com/512/1084/1084557.png'
+      });
+    }
+    _lastAlertAQI = aqi;
+  }
+
+  // ════════════════════════════════════════════════════════
+  //  SHARE LOCATION URL
+  //  Encodes lat/lng in the URL hash so anyone opening it
+  //  sees the map pre-centered on that location.
+  // ════════════════════════════════════════════════════════
+  function shareLocation() {
+    if (_userLat === null) return;
+    const url = `${location.origin}${location.pathname}#loc=${_userLat.toFixed(5)},${_userLng.toFixed(5)}`;
+    navigator.clipboard.writeText(url).then(() => {
+      const toast = document.getElementById('share-toast');
+      toast.classList.add('visible');
+      setTimeout(() => toast.classList.remove('visible'), 2500);
+    }).catch(() => {
+      // Fallback for non-HTTPS
+      window.prompt('Copy this link:', url);
+    });
+  }
+
+  // On load — check for shared location in URL hash
+  function checkSharedURL() {
+    const m = location.hash.match(/#loc=([-\d.]+),([-\d.]+)/);
+    if (m) {
+      const lat = parseFloat(m[1]), lng = parseFloat(m[2]);
+      if (!isNaN(lat) && !isNaN(lng)) {
+        // Override GPS fallback with shared location
+        return { lat, lng };
+      }
+    }
+    return null;
+  }
+
+  // ════════════════════════════════════════════════════════
+  //  ROUTE AQI EXPOSURE
+  //  Samples AQI at 5 waypoints along the straight-line route
+  //  to the safe zone and displays average exposure.
+  // ════════════════════════════════════════════════════════
+  async function computeRouteExposure(userLat, userLng, parkLat, parkLng) {
+    const N = 5;
+    const samples = Array.from({length: N}, (_, i) => {
+      const t = i / (N - 1);
+      return { lat: userLat + t*(parkLat-userLat), lng: userLng + t*(parkLng-userLng) };
+    });
+    const results = await Promise.all(samples.map(async p => {
+      try {
+        const url = `https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${p.lat.toFixed(4)}&longitude=${p.lng.toFixed(4)}&current=us_aqi&timezone=auto`;
+        const r = await fetch(url);
+        if (!r.ok) return null;
+        const d = await r.json();
+        return d.current?.us_aqi ?? null;
+      } catch { return null; }
+    }));
+    const valid = results.filter(v => v !== null);
+    if (!valid.length) return null;
+    return Math.round(valid.reduce((a,b)=>a+b,0) / valid.length);
+  }
+
+  // Hook into updateAQIPanel to also run alert check
+  const _origUpdateAQIPanel = updateAQIPanel;
+  window.updateAQIPanel = function(aqi) {
+    _origUpdateAQIPanel(aqi);
+    checkAQIAlert(aqi);
+  };
+
+  // Hook into initMap to also load sparkline, check shared URL, contours when heatmap fires
+  const _origInitMap = initMap;
+  window.initMap = async function(lat, lng, accuracyMeters) {
+    await _origInitMap(lat, lng, accuracyMeters);
+    loadSparkline(lat, lng);
+  };
+
+  // Patch drawSafeZoneOverlays to also compute route exposure
+  const _origDrawSafe = drawSafeZoneOverlays;
+  window.drawSafeZoneOverlays = async function(lat, lng, userAqi, park) {
+    await _origDrawSafe(lat, lng, userAqi, park);
+    if (park) {
+      const expWrap = document.getElementById('route-exposure-wrap');
+      expWrap.style.display = 'flex';
+      document.getElementById('route-exposure-score').textContent = '…';
+      const avgAqi = await computeRouteExposure(lat, lng, park.lat, park.lng);
+      if (avgAqi !== null) {
+        const cat = aqiCategory(avgAqi);
+        document.getElementById('route-exposure-score').textContent = avgAqi;
+        document.getElementById('route-exposure-score').style.color = cat.color;
+        document.getElementById('route-exposure-label').textContent = '· ' + cat.label;
+      } else {
+        expWrap.style.display = 'none';
+      }
+    }
+  };
+
+  // Patch heatmap setData to add pulse + draw contours
+  const _origRenderHeatmap = renderHeatmap;
+  const _origToggleHM = toggleHeatmap;
+  window.toggleHeatmap = function() {
+    _origToggleHM();
+    // After layer created, patch its setData to also draw contours + add pulse
+    if (heatmapEnabled && heatmapCanvasLayer) {
+      const _origSetData = heatmapCanvasLayer.setData.bind(heatmapCanvasLayer);
+      heatmapCanvasLayer.setData = function(points) {
+        _origSetData(points);
+        applyHeatmapPulse(heatmapCanvasLayer._canvas, true);
+        drawContours(points);
+      };
+    }
+    if (!heatmapEnabled) clearContours();
+  };
+
+  // Check URL share on load
+  const sharedLoc = checkSharedURL();
+  if (sharedLoc) {
+    // Will be overridden in startGPS if GPS succeeds, but set as fallback
+    window._sharedFallback = sharedLoc;
+  }
+</script>
+<script>window.GEMINI_API_KEY = '3c6018c1a469453181efdaa8bae424b0.dfiQs62RCvC5ZeFM';</script>
+<script src="chatbot.js"></script>
+</body>
+</html>
