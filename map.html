@@ -84,12 +84,22 @@
     body.embedded #hud-header,
     body.embedded #status-bar { display: none !important; }
 
-    /* Compact HUDs when embedded */
-    body.embedded #aqi-panel  { top: 8px; right: 8px; padding: 8px 12px; }
-    body.embedded #layer-toggle { top: 8px; left: 8px; }
-    body.embedded #theme-toggle { top: 58px; left: 8px; }
-    body.embedded #legend      { bottom: 8px; left: 8px; padding: 10px 14px; }
-    body.embedded #safe-zone-card { bottom: 8px; }
+    /* In embedded/minimap mode — hide ALL panels, only show map + markers */
+    body.embedded #aqi-panel,
+    body.embedded #layer-toggle,
+    body.embedded #theme-toggle,
+    body.embedded #legend,
+    body.embedded #safe-zone-card,
+    body.embedded #locate-overlay-text { display: none !important; }
+
+    /* Keep the loading spinner but make it minimal */
+    body.embedded #locate-overlay {
+      background: rgba(7,11,18,0.75);
+    }
+    body.embedded .locate-text {
+      font-size: 10px;
+      letter-spacing: 2px;
+    }
 
     .brand { display: flex; align-items: center; gap: 10px; }
     .brand-icon {
@@ -504,72 +514,138 @@
     if (catEl)  catEl.textContent = cat.label;
   }
 
-  // ── Safe zone finder (probe grid for AQI ≤ 80 then nearest park) ──────────
-  const TARGET_AQI = 80, GRID_KM = 11;
+  // ── Safe zone finder ──────────────────────────────────────────────────────
+  // Open-Meteo grid: ~9km resolution. Probes must be far enough apart that
+  // they genuinely land in DIFFERENT grid cells. We use 10km minimum spacing
+  // and extend up to 80km so we can escape a regional pollution event.
+  const TARGET_AQI = 90;   // raised from 80 — more achievable in dense metros
+  const GRID_STEP  = 10;   // km between probe rings (must exceed ~9km grid)
 
   function offsetCoord(lat, lng, dxKm, dyKm) {
-    return { lat: lat + dyKm / 110.574, lng: lng + dxKm / (111.320 * Math.cos(lat * Math.PI / 180)) };
+    return {
+      lat: lat + dyKm / 110.574,
+      lng: lng + dxKm / (111.320 * Math.cos(lat * Math.PI / 180))
+    };
   }
 
+  // Snap a coordinate to the Open-Meteo grid cell key (avoids duplicate fetches)
+  function gridKey(lat, lng) {
+    return `${(lat / 0.1).toFixed(0)},${(lng / 0.1).toFixed(0)}`;
+  }
+
+  // Generate probes in 8 directions at distances 10,20,30,45,60,80 km
+  // Each ring is guaranteed to land in a new grid cell
   function generateProbes(lat, lng) {
     const probes = [];
-    const dirs = [[0,1],[1,1],[1,0],[1,-1],[0,-1],[-1,-1],[-1,0],[-1,1]];
-    for (const mult of [1, 1.5, 2, 3]) {
+    const seen   = new Set();
+    const dirs   = [[0,1],[1,1],[1,0],[1,-1],[0,-1],[-1,-1],[-1,0],[-1,1]];
+    const dists  = [10, 20, 30, 45, 60, 80]; // km
+
+    for (const d of dists) {
       for (const [dx, dy] of dirs) {
-        probes.push(offsetCoord(lat, lng, dx * GRID_KM * mult, dy * GRID_KM * mult));
+        const p   = offsetCoord(lat, lng, dx * d, dy * d);
+        const key = gridKey(p.lat, p.lng);
+        if (!seen.has(key)) {
+          seen.add(key);
+          probes.push({ ...p, dist: d });
+        }
       }
     }
     return probes;
   }
 
   async function findParkNear(lat, lng, radiusMeters) {
-    const query = `[out:json][timeout:10];(way["leisure"="park"](around:${radiusMeters},${lat},${lng});node["leisure"="park"](around:${radiusMeters},${lat},${lng});relation["leisure"="park"](around:${radiusMeters},${lat},${lng}););out center 5;`;
-    const res = await fetch('https://overpass-api.de/api/interpreter?data=' + encodeURIComponent(query));
-    if (!res.ok) return null;
-    const data = await res.json();
-    let best = null, minD = Infinity;
-    for (const el of (data.elements || [])) {
-      const pLat = el.lat ?? el.center?.lat;
-      const pLng = el.lon  ?? el.center?.lon;
-      if (!pLat || !pLng) continue;
-      const d = haversine(lat, lng, pLat, pLng);
-      if (d < minD) { minD = d; best = { lat: pLat, lng: pLng, name: el.tags?.name || 'Public Park' }; }
-    }
-    return best;
+    const query = `[out:json][timeout:15];(way["leisure"="park"](around:${radiusMeters},${lat},${lng});node["leisure"="park"](around:${radiusMeters},${lat},${lng});relation["leisure"="park"](around:${radiusMeters},${lat},${lng}););out center 5;`;
+    try {
+      const res = await fetch('https://overpass-api.de/api/interpreter?data=' + encodeURIComponent(query));
+      if (!res.ok) return null;
+      const data = await res.json();
+      let best = null, minD = Infinity;
+      for (const el of (data.elements || [])) {
+        const pLat = el.lat ?? el.center?.lat;
+        const pLng = el.lon  ?? el.center?.lon;
+        if (!pLat || !pLng) continue;
+        const d = haversine(lat, lng, pLat, pLng);
+        if (d < minD) { minD = d; best = { lat: pLat, lng: pLng, name: el.tags?.name || 'Public Park' }; }
+      }
+      return best;
+    } catch { return null; }
   }
 
   async function findPlaceWithTargetAQI(userLat, userLng) {
-    const probes = generateProbes(userLat, userLng);
-    let bestCandidate = null;
-    const rings = [probes.slice(0,8), probes.slice(8,16), probes.slice(16,24), probes.slice(24)];
-    const ringLabels = ['11km', '16km', '22km', '33km'];
+    const allProbes = generateProbes(userLat, userLng);
+    let bestCandidate = null; // lowest AQI found anywhere
 
-    for (let r = 0; r < rings.length; r++) {
-      setStatus(`PROBING ${ringLabels[r]} RADIUS FOR AQI ≤ ${TARGET_AQI}...`);
-      const results = await Promise.all(rings[r].map(async probe => {
+    // Process in distance rings — closest first, stop as soon as target is met
+    const rings = [
+      { label: '10-20km',  probes: allProbes.filter(p => p.dist <= 20) },
+      { label: '30-45km',  probes: allProbes.filter(p => p.dist > 20 && p.dist <= 45) },
+      { label: '60-80km',  probes: allProbes.filter(p => p.dist > 45) },
+    ];
+
+    for (const ring of rings) {
+      if (ring.probes.length === 0) continue;
+      setStatus(`SCANNING ${ring.label} FOR AQI ≤ ${TARGET_AQI}...`);
+
+      // Fetch all probes in this ring in parallel
+      const results = await Promise.all(ring.probes.map(async probe => {
         try {
           const aqi = await fetchAQI(probe.lat, probe.lng);
-          return { ...probe, aqi, distFromUser: haversine(userLat, userLng, probe.lat, probe.lng) };
+          if (aqi === null) return null;
+          return {
+            ...probe,
+            aqi,
+            distFromUser: haversine(userLat, userLng, probe.lat, probe.lng)
+          };
         } catch { return null; }
       }));
-      const valid = results.filter(p => p && p.aqi !== null);
-      for (const p of valid) { if (!bestCandidate || p.aqi < bestCandidate.aqi) bestCandidate = p; }
-      const qualifying = valid.filter(p => p.aqi <= TARGET_AQI).sort((a,b) => a.distFromUser - b.distFromUser);
+
+      const valid = results.filter(Boolean);
+
+      // Track global best (lowest AQI seen across all rings)
+      for (const p of valid) {
+        if (!bestCandidate || p.aqi < bestCandidate.aqi) bestCandidate = p;
+      }
+
+      // Find qualifying probes (AQI at or below target) sorted closest first
+      const qualifying = valid
+        .filter(p => p.aqi <= TARGET_AQI)
+        .sort((a, b) => a.distFromUser - b.distFromUser);
+
       if (qualifying.length > 0) {
         const winner = qualifying[0];
-        setStatus(`LOCATING NEAREST PARK AT ${ringLabels[r]}...`);
-        const park = await findParkNear(winner.lat, winner.lng, 8000).catch(() => null);
-        if (park) return { lat: park.lat, lng: park.lng, name: park.name, aqi: winner.aqi, dist: haversine(userLat, userLng, park.lat, park.lng) };
-        return { lat: winner.lat, lng: winner.lng, name: 'Cleaner Air Zone', aqi: winner.aqi, dist: winner.distFromUser };
+        setStatus(`FINDING PARK NEAR ${ring.label} CLEAN ZONE...`);
+        const park = await findParkNear(winner.lat, winner.lng, 10000);
+        if (park) {
+          return {
+            lat: park.lat, lng: park.lng,
+            name: park.name,
+            aqi: winner.aqi,
+            dist: haversine(userLat, userLng, park.lat, park.lng)
+          };
+        }
+        // No park found — use the clean probe coords directly
+        return {
+          lat: winner.lat, lng: winner.lng,
+          name: 'Clean Air Zone',
+          aqi: winner.aqi,
+          dist: winner.distFromUser
+        };
       }
     }
+
+    // No probe hit target — return best we found with a real park if possible
     if (bestCandidate) {
-      setStatus('BEST AVAILABLE AIR FOUND...');
-      const park = await findParkNear(bestCandidate.lat, bestCandidate.lng, 8000).catch(() => null);
+      setStatus('RETURNING BEST AVAILABLE ZONE...');
+      const park = await findParkNear(bestCandidate.lat, bestCandidate.lng, 10000);
+      const finalLat  = park?.lat  ?? bestCandidate.lat;
+      const finalLng  = park?.lng  ?? bestCandidate.lng;
+      const finalName = park?.name ?? 'Best Available Zone';
       return {
-        lat: park?.lat ?? bestCandidate.lat, lng: park?.lng ?? bestCandidate.lng,
-        name: park?.name ?? 'Best Available Zone', aqi: bestCandidate.aqi,
-        dist: haversine(userLat, userLng, park?.lat ?? bestCandidate.lat, park?.lng ?? bestCandidate.lng)
+        lat: finalLat, lng: finalLng,
+        name: finalName,
+        aqi: bestCandidate.aqi,
+        dist: haversine(userLat, userLng, finalLat, finalLng)
       };
     }
     return null;
