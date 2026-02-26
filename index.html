@@ -115,10 +115,8 @@
 </head>
 <body class="pb-20">
 
-<!-- ══ REFRESH TOAST ══ -->
 <div id="refresh-toast">⟳ DATA REFRESHED</div>
 
-<!-- ══ HEADER ══ -->
 <header class="fixed top-0 left-0 right-0 z-50 px-5 py-3 flex items-center justify-between">
   <div class="flex items-center gap-2">
     <svg viewBox="0 0 32 32" fill="none" class="w-8 h-8">
@@ -134,7 +132,6 @@
       <span class="w-2 h-2 rounded-full pulse-dot" style="background:var(--neon-green)"></span>
       <span style="color:var(--neon-green);font-size:10px;letter-spacing:.1em;">LIVE</span>
     </div>
-    <!-- Manual refresh button -->
     <button id="btn-refresh" title="Refresh now"
       class="ripple-host w-8 h-8 rounded-full flex items-center justify-center transition-all"
       style="background:rgba(0,212,255,.07);border:1px solid rgba(0,212,255,.2);">
@@ -152,14 +149,12 @@
   </div>
 </header>
 
-<!-- Next-refresh progress bar just below header -->
 <div id="next-refresh-bar" class="fixed top-14 left-0 right-0 z-40">
   <div id="next-refresh-fill"></div>
 </div>
 
 <main class="pt-16 px-4 max-w-md mx-auto space-y-5">
 
-  <!-- Location + timestamp bar -->
   <div class="mt-4 flex items-center justify-between text-xs section-animate d1">
     <div class="flex items-center gap-1.5 opacity-60">
       <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -169,7 +164,6 @@
       <span id="location-text">Locating...</span>
     </div>
     <div class="flex items-center gap-2">
-      <!-- stale badge -->
       <span id="stale-badge" class="items-center gap-1 text-xs px-2 py-0.5 rounded-full"
         style="background:rgba(255,215,0,.1);color:#ffd700;border:1px solid rgba(255,215,0,.25);">
         ⚡ cached
@@ -178,21 +172,15 @@
     </div>
   </div>
 
-  <!-- ══ HERO AQI RING ══ -->
   <section class="flex flex-col items-center py-4 section-animate d2">
     <p class="text-xs tracking-widest mb-4 opacity-40 uppercase font-orbitron">Air Quality Index</p>
 
     <div class="relative flex items-center justify-center" style="width:220px;height:220px;">
       <svg class="absolute inset-0 w-full h-full" viewBox="0 0 220 220">
-        <!-- tick ring -->
         <circle cx="110" cy="110" r="104" stroke="rgba(0,212,255,.07)" stroke-width="1" stroke-dasharray="3 6" fill="none"/>
-        <!-- bg arc -->
         <circle class="progress-ring-bg" cx="110" cy="110" r="85" stroke="#00d4ff" stroke-width="12" fill="none" transform="rotate(-90 110 110)"/>
-        <!-- refresh progress ghost ring -->
         <circle class="refresh-ring" id="refresh-arc" cx="110" cy="110" r="85" stroke="#00d4ff" stroke-width="12" fill="none" transform="rotate(-90 110 110)"/>
-        <!-- main AQI arc -->
         <circle class="progress-ring-circle" id="aqi-arc" cx="110" cy="110" r="85" stroke="#00d4ff" stroke-width="12" fill="none" transform="rotate(-90 110 110)"/>
-        <!-- breathing outer -->
         <circle class="breathe-ring" cx="110" cy="110" r="100" stroke="rgba(0,212,255,.1)" stroke-width="1" fill="none"/>
         <defs>
           <filter id="dotGlow"><feGaussianBlur stdDeviation="3" result="blur"/>
@@ -201,7 +189,6 @@
         </defs>
       </svg>
 
-      <!-- inner text -->
       <div class="relative flex flex-col items-center z-10 text-center">
         <span id="aqi-display" class="font-orbitron font-black glow-blue count-anim"
           style="font-size:64px;line-height:1;color:var(--neon-blue)">--</span>
@@ -214,14 +201,12 @@
       </div>
     </div>
 
-    <!-- scale legend -->
     <div class="flex items-center gap-1 mt-2 text-xs opacity-35 font-mono">
       <span style="color:#00ff88">0</span>
       <div class="h-1 w-32 rounded-full" style="background:linear-gradient(90deg,#00ff88,#00d4ff,#ffd700,#ff6b35,#ff0044)"></div>
       <span style="color:#ff0044">500</span>
     </div>
 
-    <!-- next refresh countdown chip -->
     <div class="mt-3 flex items-center gap-1.5 text-xs opacity-40">
       <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
         <circle cx="12" cy="12" r="10"/><path stroke-linecap="round" d="M12 6v6l4 2"/>
@@ -230,10 +215,8 @@
     </div>
   </section>
 
-  <!-- ══ STATS ROW ══ -->
   <section class="section-animate d3">
     <div class="grid grid-cols-3 gap-3">
-      <!-- PM2.5 -->
       <div class="stat-card ripple-host rounded-2xl p-3 flex flex-col items-center text-center border-glow-blue cursor-pointer">
         <div class="w-8 h-8 rounded-full flex items-center justify-center mb-2" style="background:rgba(0,212,255,.1)">
           <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="#00d4ff" stroke-width="2">
@@ -245,7 +228,6 @@
         <span class="text-xs opacity-40 mt-0.5">μg/m³</span>
         <span class="text-xs opacity-60 mt-1">PM2.5</span>
       </div>
-      <!-- AQI Category card -->
       <div class="stat-card ripple-host rounded-2xl p-3 flex flex-col items-center text-center cursor-pointer border-glow-green">
         <div class="w-8 h-8 rounded-full flex items-center justify-center mb-2" style="background:rgba(0,255,136,.1)">
           <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="#00ff88" stroke-width="2">
@@ -256,7 +238,6 @@
         <span class="text-xs opacity-40 mt-0.5">category</span>
         <span class="text-xs opacity-60 mt-1">Status</span>
       </div>
-      <!-- Risk Level -->
       <div id="risk-card" class="stat-card ripple-host rounded-2xl p-3 flex flex-col items-center text-center cursor-pointer" style="border-color:rgba(255,149,0,.2)">
         <div class="w-8 h-8 rounded-full flex items-center justify-center mb-2" style="background:rgba(255,149,0,.1)">
           <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="#ff9500" stroke-width="2">
@@ -269,7 +250,6 @@
       </div>
     </div>
 
-    <!-- O2 + CO2 row -->
     <div class="grid grid-cols-2 gap-3 mt-3">
       <div class="stat-card ripple-host rounded-2xl px-4 py-2.5 flex items-center justify-between border-glow-blue cursor-pointer">
         <div>
@@ -294,7 +274,6 @@
     </div>
   </section>
 
-  <!-- ══ MAP ══ -->
   <section class="section-animate d4">
     <div class="flex items-center justify-between mb-3">
       <h2 class="font-orbitron text-xs tracking-widest opacity-50 uppercase">Live Pollution Map</h2>
@@ -313,7 +292,6 @@
         allow="geolocation" loading="lazy"></iframe>
       <div style="position:absolute;inset:0;border-radius:16px;border:1px solid rgba(0,212,255,.22);pointer-events:none;z-index:2;"></div>
     </div>
-    <!-- safe-zone strip -->
     <div id="map-sync-strip"
          class="mt-2 rounded-xl px-3 py-2 flex items-center gap-2 transition-opacity duration-500"
          style="background:rgba(0,232,122,.04);border:1px solid rgba(0,232,122,.12);opacity:0;">
@@ -326,7 +304,6 @@
     </div>
   </section>
 
-  <!-- ══ ALERTS ══ -->
   <section id="alert-feed-section" class="mb-4 section-animate d5">
     <div class="flex items-center justify-between mb-3">
       <h2 class="font-orbitron text-xs tracking-widest opacity-50 uppercase">Health Alerts</h2>
@@ -350,7 +327,6 @@
 
 </main>
 
-<!-- ══ BOTTOM NAV ══ -->
 <nav class="bottom-nav fixed bottom-0 left-0 right-0 flex items-center justify-around py-2 px-2 z-50">
   <button class="nav-btn active flex flex-col items-center gap-1 px-3 py-2 rounded-xl" style="background:rgba(0,212,255,.08)">
     <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="#00d4ff" stroke-width="1.8">
@@ -387,6 +363,12 @@
 <script src="logic.js"></script>
 <script src="api.js"></script>
 <script>
+// ─── AUTH CHECK ───
+// If user has not finished onboarding, send them to Sign Up
+if (!localStorage.getItem('oxy_onboarded')) {
+    window.location.href = 'signup.html';
+}
+
 // ══════════════════════════════════════════════════════════════════════════════
 // index-ui.js  —  Pure UI layer. No data fetching. Reacts to oxytrace:data.
 // ══════════════════════════════════════════════════════════════════════════════
