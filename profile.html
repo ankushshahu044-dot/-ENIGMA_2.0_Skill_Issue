@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OxyTrace — Live Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=IBM+Plex+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+  <style>
+    :root {
+      --neon-blue:#00d4ff; --neon-green:#00ff88;
+      --neon-yellow:#ffd700; --neon-orange:#ff9500; --neon-red:#ff4444;
+      --bg-dark:#070b0f; --card-bg:#0d1520;
+    }
+    *{box-sizing:border-box;}
+    body{
+      font-family:'IBM Plex Mono',monospace;
+      background:var(--bg-dark);
+      background-image:
+        radial-gradient(ellipse 80% 50% at 50% -10%,rgba(0,212,255,.06) 0%,transparent 70%),
+        linear-gradient(rgba(0,212,255,.03) 1px,transparent 1px),
+        linear-gradient(90deg,rgba(0,212,255,.03) 1px,transparent 1px);
+      background-size:100% 100%,32px 32px,32px 32px;
+      min-height:100vh; color:#e0f4ff; overflow-x:hidden;
+    }
+    body::before{content:'';position:fixed;inset:0;
+      background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.07) 2px,rgba(0,0,0,.07) 4px);
+      pointer-events:none;z-index:9999;}
+    .font-orbitron{font-family:'Orbitron',sans-serif;}
+    .glow-blue{text-shadow:0 0 10px var(--neon-blue),0 0 30px rgba(0,212,255,.5);}
+    .glow-green{text-shadow:0 0 10px var(--neon-green),0 0 30px rgba(0,255,136,.5);}
+    .stat-card{background:var(--card-bg);border:1px solid rgba(0,212,255,.15);transition:border-color .3s,transform .3s;}
+    .stat-card:hover{border-color:rgba(0,212,255,.5);transform:translateY(-2px);}
+    /* AQI ring */
+    .progress-ring-circle{
+      stroke-dasharray:534;stroke-dashoffset:534;
+      stroke-linecap:round;
+      transition:stroke-dashoffset 1.4s cubic-bezier(.4,0,.2,1),stroke .4s ease,filter .4s ease;
+    }
+    /* header */
+    header{background:rgba(7,11,15,.85);backdrop-filter:blur(16px);border-bottom:1px solid rgba(0,212,255,.12);}
+    /* animations */
+    @keyframes pulse-dot{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.4;transform:scale(.8);}}
+    .pulse-dot{animation:pulse-dot 1.5s ease-in-out infinite;}
+    @keyframes flicker{0%,97%,100%{opacity:1;}98%{opacity:.5;}}
+    .live-label{animation:flicker 4s ease-in-out infinite;}
+    @keyframes breathe{0%,100%{opacity:.4;}50%{opacity:.9;}}
+    .breathe-ring{animation:breathe 3s ease-in-out infinite;}
+    @keyframes score-anim{from{opacity:0;transform:scale(.8);}to{opacity:1;transform:scale(1);}}
+    .score-number{animation:score-anim .8s cubic-bezier(.34,1.56,.64,1) .3s both;}
+    /* bottom nav */
+    .bottom-nav{background:rgba(7,11,15,.95);backdrop-filter:blur(20px);border-top:1px solid rgba(0,212,255,.15);}
+    .nav-btn.active svg,.nav-btn.active span{color:var(--neon-blue);}
+    .nav-btn.active{filter:drop-shadow(0 0 6px rgba(0,212,255,.6));}
+    /* refresh toast */
+    #refresh-toast{
+      position:fixed;top:68px;left:50%;transform:translateX(-50%) translateY(-10px);
+      background:rgba(0,255,136,.1);border:1px solid rgba(0,255,136,.3);
+      border-radius:999px;padding:6px 18px;font-size:11px;letter-spacing:.1em;
+      color:var(--neon-green);opacity:0;transition:opacity .3s,transform .3s;z-index:200;
+      font-family:'IBM Plex Mono',monospace;pointer-events:none;white-space:nowrap;
+    }
+    #refresh-toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+    /* progress bar */
+    #refresh-bar{height:2px;background:var(--neon-blue);width:100%;position:fixed;top:60px;left:0;z-index:60;transform-origin:left;transform:scaleX(0);transition:transform .5s;}
+    /* ML risk card */
+    .ml-ring-circle{
+      stroke-dasharray:314;stroke-dashoffset:314;stroke-linecap:round;
+      transition:stroke-dashoffset 1.5s cubic-bezier(.4,0,.2,1),stroke .4s;
+    }
+  </style>
+</head>
+<body class="pb-20">
+
+<div id="refresh-toast">⟳ DATA REFRESHED</div>
+<div id="refresh-bar"></div>
+
+<!-- ══ HEADER ══ -->
+<header class="fixed top-0 left-0 right-0 z-50 px-5 py-3 flex items-center justify-between">
+  <div class="flex items-center gap-2">
+    <svg viewBox="0 0 32 32" fill="none" class="w-8 h-8">
+      <circle cx="16" cy="16" r="14" stroke="#00d4ff" stroke-width="1.5" opacity=".4"/>
+      <path d="M10 20 C10 20 10 10 16 10 C22 10 22 20 22 20" stroke="#00d4ff" stroke-width="2" stroke-linecap="round" fill="none"/>
+      <path d="M13 20 C13 20 13 14 16 14 C19 14 19 20 19 20" stroke="#00ff88" stroke-width="2" stroke-linecap="round" fill="none"/>
+      <circle cx="16" cy="10" r="2" fill="#00d4ff" opacity=".8"/>
+    </svg>
+    <span class="font-orbitron font-black text-lg tracking-widest glow-blue" style="color:var(--neon-blue)">OXY<span style="color:var(--neon-green)" class="glow-green">TRACE</span></span>
+  </div>
+  <div class="flex items-center gap-3">
+    <div class="flex items-center gap-1.5 live-label">
+      <span class="w-2 h-2 rounded-full pulse-dot" style="background:var(--neon-green)"></span>
+      <span style="color:var(--neon-green);font-size:10px;letter-spacing:.1em;">LIVE</span>
+    </div>
+    <!-- countdown chip -->
+    <div id="countdown-chip" class="font-orbitron text-xs px-2 py-0.5 rounded-full opacity-40"
+      style="border:1px solid rgba(0,212,255,.2);font-size:9px;">5:00</div>
+    <!-- manual refresh -->
+    <button id="refresh-btn" onclick="window.OxyTraceAPI&&window.OxyTraceAPI.forceRefresh()"
+      class="w-8 h-8 rounded-full flex items-center justify-center"
+      style="background:rgba(0,212,255,.08);border:1px solid rgba(0,212,255,.2);">
+      <svg id="refresh-icon" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="var(--neon-blue)" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+      </svg>
+    </button>
+  </div>
+</header>
+
+<main class="pt-16 px-4 max-w-md mx-auto space-y-5">
+
+  <!-- Location bar -->
+  <div class="mt-4 flex items-center justify-between text-xs opacity-60">
+    <div class="flex items-center gap-1.5">
+      <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
+        <circle cx="12" cy="11" r="3" stroke-width="2"/>
+      </svg>
+      <span id="location-text">Locating…</span>
+    </div>
+    <span id="last-updated" style="color:var(--neon-blue)">Fetching data…</span>
+  </div>
+
+  <!-- ══ HERO AQI RING ══ -->
+  <section class="flex flex-col items-center py-4">
+    <p class="font-orbitron text-xs tracking-widest mb-4 opacity-40 uppercase">Air Quality Index</p>
+
+    <div class="relative flex items-center justify-center" style="width:220px;height:220px;">
+      <svg class="absolute inset-0 w-full h-full" viewBox="0 0 220 220">
+        <circle cx="110" cy="110" r="104" stroke="rgba(0,212,255,.06)" stroke-width="1" stroke-dasharray="3 6" fill="none"/>
+        <circle cx="110" cy="110" r="85" stroke="#00d4ff" stroke-width="12" fill="none" stroke-opacity=".1" transform="rotate(-90 110 110)"/>
+        <circle id="aqi-ring" class="progress-ring-circle" cx="110" cy="110" r="85"
+          stroke="var(--neon-blue)" stroke-width="12" fill="none" transform="rotate(-90 110 110)"/>
+        <!-- countdown ghost arc -->
+        <circle id="countdown-arc" cx="110" cy="110" r="85"
+          stroke="rgba(0,212,255,.08)" stroke-width="4" fill="none"
+          stroke-dasharray="534" stroke-dashoffset="0"
+          transform="rotate(-90 110 110)" style="transition:stroke-dashoffset 1s linear;"/>
+        <circle class="breathe-ring" cx="110" cy="110" r="99" stroke="rgba(0,212,255,.12)" stroke-width="1" fill="none"/>
+        <circle id="ring-dot" cx="110" cy="25" r="5" fill="#00d4ff" transform="rotate(0 110 110)" filter="url(#glow)"/>
+        <defs>
+          <filter id="glow"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+        </defs>
+      </svg>
+
+      <div class="relative flex flex-col items-center z-10">
+        <span id="aqi-display" class="score-number font-orbitron font-black glow-blue"
+          style="font-size:62px;line-height:1;color:var(--neon-blue)">--</span>
+        <span id="status-text" class="font-orbitron text-xs tracking-wider mt-1"
+          style="color:var(--neon-yellow)">⏳ LOADING…</span>
+        <div id="status-sub" class="mt-2 px-3 py-0.5 rounded-full text-xs"
+          style="background:rgba(255,215,0,.06);border:1px solid rgba(255,215,0,.3);color:rgba(255,215,0,.7)">
+          Fetching air quality
+        </div>
+      </div>
+    </div>
+
+    <!-- AQI scale -->
+    <div class="flex items-center gap-1 mt-3 text-xs opacity-30 font-mono">
+      <span style="color:#00ff88">0</span>
+      <div class="h-1 w-32 rounded-full" style="background:linear-gradient(90deg,#00ff88,#00d4ff,#ffd700,#ff6b35,#ff0044)"></div>
+      <span style="color:#ff0044">500</span>
+    </div>
+  </section>
+
+  <!-- ══ STATS ROW ══ -->
+  <section>
+    <div class="grid grid-cols-3 gap-3">
+      <!-- PM2.5 -->
+      <div class="stat-card rounded-2xl p-3 flex flex-col items-center text-center">
+        <div class="w-8 h-8 rounded-full flex items-center justify-center mb-2" style="background:rgba(0,212,255,.1)">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="var(--neon-blue)" stroke-width="2">
+            <circle cx="12" cy="12" r="4"/>
+            <path stroke-linecap="round" d="M12 3v1m0 16v1M3 12h1m16 0h1m-3.05-6.95l-.7.7M6.75 17.25l-.7.7m0-10.1l.7.7m10.55 9.45l.7.7"/>
+          </svg>
+        </div>
+        <span id="pm25-val" class="font-orbitron font-bold text-lg" style="color:var(--neon-blue)">--</span>
+        <span class="text-xs opacity-40 mt-0.5">μg/m³</span>
+        <span class="text-xs opacity-60 mt-1">PM2.5</span>
+      </div>
+      <!-- Category -->
+      <div class="stat-card rounded-2xl p-3 flex flex-col items-center text-center" style="border-color:rgba(255,215,0,.2)">
+        <div class="w-8 h-8 rounded-full flex items-center justify-center mb-2" style="background:rgba(255,215,0,.1)">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="var(--neon-yellow)" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+          </svg>
+        </div>
+        <span id="category-val" class="font-orbitron font-bold text-xs text-center" style="color:var(--neon-yellow);line-height:1.3">--</span>
+        <span class="text-xs opacity-60 mt-1">Category</span>
+      </div>
+      <!-- Risk -->
+      <div class="stat-card rounded-2xl p-3 flex flex-col items-center text-center" style="border-color:rgba(255,68,68,.2)">
+        <div class="w-8 h-8 rounded-full flex items-center justify-center mb-2" style="background:rgba(255,68,68,.1)">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="var(--neon-red)" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+          </svg>
+        </div>
+        <span id="risk-val" class="font-orbitron font-bold text-xs" style="color:var(--neon-red)">--</span>
+        <span class="text-xs opacity-60 mt-1">Health Risk</span>
+      </div>
+    </div>
+
+    <!-- O₂ + CO₂ row -->
+    <div class="grid grid-cols-2 gap-3 mt-3">
+      <div class="stat-card rounded-2xl px-4 py-2.5 flex items-center justify-between">
+        <div>
+          <p class="text-xs opacity-50">O₂ Saturation</p>
+          <p class="font-orbitron font-bold" style="color:var(--neon-blue)">97.4<span class="text-xs font-normal opacity-60">%</span></p>
+        </div>
+        <svg viewBox="0 0 60 24" class="w-14 h-6" fill="none">
+          <polyline points="0,18 10,14 20,16 30,10 40,12 50,8 60,10" stroke="var(--neon-blue)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="60" cy="10" r="2.5" fill="var(--neon-blue)"/>
+        </svg>
+      </div>
+      <div class="stat-card rounded-2xl px-4 py-2.5 flex items-center justify-between" style="border-color:rgba(255,100,100,.2)">
+        <div>
+          <p class="text-xs opacity-50">CO₂ Level</p>
+          <p class="font-orbitron font-bold" style="color:#ff6464">412<span class="text-xs font-normal opacity-60"> ppm</span></p>
+        </div>
+        <svg viewBox="0 0 60 24" class="w-14 h-6" fill="none">
+          <polyline points="0,12 10,16 20,14 30,18 40,14 50,16 60,20" stroke="#ff6464" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="60" cy="20" r="2.5" fill="#ff6464"/>
+        </svg>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ ML RISK CARD (from last profile scan) ══ -->
+  <section id="ml-section" class="stat-card rounded-2xl p-5" style="display:none">
+    <div class="flex items-center justify-between mb-4">
+      <p class="font-orbitron text-xs tracking-widest opacity-35 uppercase">🤖 ML Risk Assessment</p>
+      <span class="font-orbitron text-xs px-2 py-0.5 rounded-full"
+        style="background:rgba(0,212,255,.08);color:var(--neon-blue);border:1px solid rgba(0,212,255,.2);">RF-v1</span>
+    </div>
+    <div class="flex items-center gap-4">
+      <div class="relative flex-shrink-0" style="width:80px;height:80px;">
+        <svg viewBox="0 0 80 80" class="w-full h-full" style="transform:rotate(-90deg)">
+          <circle cx="40" cy="40" r="35" stroke="rgba(255,255,255,.05)" stroke-width="8" fill="none"/>
+          <circle id="ml-ring" class="ml-ring-circle" cx="40" cy="40" r="35"
+            stroke="var(--neon-green)" stroke-width="8" fill="none"/>
+        </svg>
+        <div class="absolute inset-0 flex flex-col items-center justify-center">
+          <span id="ml-pct" class="font-orbitron font-black" style="font-size:20px;color:var(--neon-green)">--%</span>
+        </div>
+      </div>
+      <div class="flex-1">
+        <div id="ml-class" class="font-orbitron text-sm font-bold mb-1" style="color:var(--neon-green)">--</div>
+        <p id="ml-explanation" class="text-xs leading-relaxed opacity-60">Run the risk assessment on the home screen for personalised ML analysis.</p>
+        <a href="index.html" class="inline-block mt-2 font-orbitron text-xs px-3 py-1 rounded-full"
+          style="background:rgba(0,212,255,.08);color:var(--neon-blue);border:1px solid rgba(0,212,255,.2);text-decoration:none;">
+          Update Profile →
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ MAP ══ -->
+  <section>
+    <div class="flex items-center justify-between mb-3">
+      <h2 class="font-orbitron text-xs tracking-widest opacity-40 uppercase">Live Pollution Map</h2>
+      <a href="map.html" target="_blank"
+        class="text-xs px-2.5 py-1 rounded-full border flex items-center gap-1"
+        style="border-color:rgba(0,212,255,.3);color:var(--neon-blue);text-decoration:none;">
+        ↗ Full Screen
+      </a>
+    </div>
+    <div class="rounded-2xl overflow-hidden" style="height:260px;position:relative;border:1px solid rgba(0,212,255,.2);">
+      <iframe id="map-iframe" src="map.html"
+        style="width:100%;height:100%;border:none;display:block;" loading="lazy" allow="geolocation">
+      </iframe>
+    </div>
+    <!-- Safe-zone strip -->
+    <div id="map-sync-strip" class="mt-2 rounded-xl px-4 py-2 flex items-center justify-between text-xs opacity-0 transition-opacity duration-500"
+      style="background:rgba(0,255,136,.05);border:1px solid rgba(0,255,136,.15);">
+      <div class="flex items-center gap-2">
+        <span>🌿</span>
+        <span id="strip-park-name" class="font-orbitron" style="color:var(--neon-green);font-size:10px;letter-spacing:.05em;">—</span>
+      </div>
+      <div class="flex items-center gap-3">
+        <span class="opacity-50">Safe AQI:</span>
+        <span id="strip-safe-aqi" class="font-orbitron font-bold" style="color:var(--neon-green)">—</span>
+        <span class="opacity-50">·</span>
+        <span id="strip-safe-dist" style="color:var(--neon-yellow)">—</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ ALERTS FEED ══ -->
+  <section class="mb-4">
+    <h2 class="font-orbitron text-xs tracking-widest opacity-40 uppercase mb-3">Health Alerts</h2>
+    <div id="alert-feed" class="space-y-2">
+      <div class="stat-card rounded-xl px-4 py-3 flex items-center gap-3 opacity-30">
+        <div class="w-8 h-8 rounded-full flex items-center justify-center" style="background:rgba(0,212,255,.1)">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="var(--neon-blue)" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/><path stroke-linecap="round" d="M12 8v4m0 4h.01"/>
+          </svg>
+        </div>
+        <div>
+          <p class="text-sm" style="color:var(--neon-blue)">Waiting for location data…</p>
+          <p class="text-xs opacity-40">Alerts will appear once AQI is fetched</p>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<!-- ══ BOTTOM NAV ══ -->
+<nav class="bottom-nav fixed bottom-0 left-0 right-0 flex items-center justify-around py-2 px-2 z-50">
+  <a href="profile.html" class="nav-btn active flex flex-col items-center gap-1 px-3 py-2 rounded-xl"
+    style="text-decoration:none;background:rgba(0,212,255,.08)">
+    <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="var(--neon-blue)" stroke-width="1.8">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M3 9.75L12 3l9 6.75V21a1 1 0 01-1 1H4a1 1 0 01-1-1V9.75z"/>
+      <path stroke-linecap="round" stroke-linejoin="round" d="M9 22V12h6v10"/>
+    </svg>
+    <span class="text-xs font-orbitron" style="color:var(--neon-blue);font-size:9px;letter-spacing:.05em;">Home</span>
+  </a>
+  <a href="map.html" class="nav-btn flex flex-col items-center gap-1 px-3 py-2 rounded-xl" style="text-decoration:none">
+    <svg class="w-5 h-5 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M9 3L3 6v15l6-3 6 3 6-3V3l-6 3-6-3z"/>
+      <path stroke-linecap="round" stroke-linejoin="round" d="M9 3v15m6-12v15"/>
+    </svg>
+    <span class="text-xs opacity-40 font-orbitron" style="font-size:9px;letter-spacing:.05em;">Map</span>
+  </a>
+  <a href="health.html" class="nav-btn flex flex-col items-center gap-1 px-3 py-2 rounded-xl" style="text-decoration:none">
+    <svg class="w-5 h-5 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M4.318 6.318a4.5 4.5 0 016.364 0L12 7.636l1.318-1.318a4.5 4.5 0 116.364 6.364L12 20.364l-7.682-7.682a4.5 4.5 0 010-6.364z"/>
+    </svg>
+    <span class="text-xs opacity-40 font-orbitron" style="font-size:9px;letter-spacing:.05em;">Health</span>
+  </a>
+  <a href="index.html" class="nav-btn flex flex-col items-center gap-1 px-3 py-2 rounded-xl relative" style="text-decoration:none">
+    <svg class="w-5 h-5 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+    </svg>
+    <span class="text-xs opacity-40 font-orbitron" style="font-size:9px;letter-spacing:.05em;">Profile</span>
+  </a>
+</nav>
+
+<script src="firebase.js"></script>
+<script src="logic.js"></script>
+<script src="app.js"></script>
+<script>
+// ══════════════════════════════════════════════════════════════════════════════
+// profile-ui.js — Pure UI layer. Listens to oxytrace:data from app.js.
+// ══════════════════════════════════════════════════════════════════════════════
+
+const CIRCUMFERENCE = 2 * Math.PI * 85; // r=85 → 534
+
+// ── Element refs ──────────────────────────────────────────────────────────────
+const aqiEl      = document.getElementById('aqi-display');
+const statusEl   = document.getElementById('status-text');
+const statusSub  = document.getElementById('status-sub');
+const ringEl     = document.getElementById('aqi-ring');
+const locEl      = document.getElementById('location-text');
+const updatedEl  = document.getElementById('last-updated');
+
+// ── Update AQI ring + hero ────────────────────────────────────────────────────
+function updateHero(aqi, tier) {
+  if (aqiEl) {
+    aqiEl.textContent  = aqi;
+    aqiEl.style.color  = tier.color;
+    aqiEl.style.textShadow = `0 0 12px ${tier.color}, 0 0 30px ${tier.glow}`;
+  }
+  if (statusEl) { statusEl.textContent=tier.label; statusEl.style.color=tier.color; statusEl.style.textShadow=`0 0 10px ${tier.glow}`; }
+  if (statusSub) { statusSub.textContent=tier.sub; statusSub.style.color=tier.color; statusSub.style.borderColor=tier.color+'44'; statusSub.style.background=tier.color+'12'; }
+  if (ringEl) {
+    const pct = Math.min(aqi,500)/500;
+    ringEl.style.strokeDasharray  = CIRCUMFERENCE;
+    ringEl.style.strokeDashoffset = CIRCUMFERENCE*(1-pct);
+    ringEl.style.stroke  = tier.color;
+    ringEl.style.filter  = `drop-shadow(0 0 10px ${tier.color})`;
+  }
+}
+
+// ── Small stat cards ──────────────────────────────────────────────────────────
+function updateStats(d) {
+  const pm25El = document.getElementById('pm25-val');
+  if (pm25El) {
+    const pm25 = d.pollutants?.['PM2.5'] || Math.round(d.aqi * 0.3);
+    pm25El.textContent = pm25;
+    pm25El.style.color = d.color;
+  }
+  const catEl = document.getElementById('category-val');
+  if (catEl) { catEl.textContent=d.label; catEl.style.color=d.color; }
+  const riskEl = document.getElementById('risk-val');
+  if (riskEl && window.OxyTrace) {
+    const profile = window.OxyTrace.getUserProfile();
+    const r = window.OxyTrace.calculateHealthRisk(d.aqi, profile.conditions, profile.age);
+    riskEl.textContent = r.riskLevel;
+    riskEl.style.color = r.riskLevel==='Low'?'var(--neon-green)':r.riskLevel==='Moderate'?'var(--neon-yellow)':'var(--neon-red)';
+  }
+}
+
+// ── Alert feed ────────────────────────────────────────────────────────────────
+let _alertCount = 0;
+function pushAlert(aqi, color) {
+  if (aqi <= 100) return;
+  _alertCount++;
+  const feed = document.getElementById('alert-feed');
+  if (!feed) return;
+  // Clear placeholder on first real alert
+  if (_alertCount === 1) feed.innerHTML = '';
+  const card = document.createElement('div');
+  card.className = 'stat-card rounded-xl px-4 py-3 flex items-center gap-3';
+  card.style.borderColor = color+'55';
+  card.style.animation   = 'fadeInUp .4s ease both';
+  card.innerHTML = `
+    <div class="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0" style="background:${color}15">
+      <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="${color}" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+      </svg>
+    </div>
+    <div class="flex-1 min-w-0">
+      <p class="text-sm font-medium" style="color:${color}">AQI ${aqi} — ${getAQILabelUI(aqi)}</p>
+      <p class="text-xs opacity-40 truncate">${new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})} · Limit outdoor exposure</p>
+    </div>`;
+  feed.insertBefore(card, feed.firstChild);
+  // Keep max 5
+  while (feed.children.length > 5) feed.removeChild(feed.lastChild);
+}
+
+function getAQILabelUI(v){if(v<=50)return'Good';if(v<=100)return'Moderate';if(v<=150)return'Unhealthy (Sensitive)';if(v<=200)return'Unhealthy';if(v<=300)return'Very Unhealthy';return'Hazardous';}
+
+// ── Countdown ─────────────────────────────────────────────────────────────────
+const REFRESH_TOTAL = 300; // 5 min
+window.addEventListener('oxytrace:countdown', e => {
+  const s = e.detail.secondsLeft;
+  const m = Math.floor(s/60), sec = s%60;
+  const chip = document.getElementById('countdown-chip');
+  if (chip) chip.textContent = `${m}:${String(sec).padStart(2,'0')}`;
+  // Progress bar
+  const bar = document.getElementById('refresh-bar');
+  if (bar) bar.style.transform = `scaleX(${1 - s/REFRESH_TOTAL})`;
+  // Ghost arc
+  const arc = document.getElementById('countdown-arc');
+  if (arc) arc.style.strokeDashoffset = CIRCUMFERENCE * (s/REFRESH_TOTAL);
+});
+
+// ── Fetching spinner ──────────────────────────────────────────────────────────
+window.addEventListener('oxytrace:fetching', () => {
+  const icon = document.getElementById('refresh-icon');
+  if (icon) { icon.style.transition='transform .3s'; icon.style.transform='rotate(360deg)'; setTimeout(()=>{icon.style.transform='rotate(0deg)';},600); }
+});
+
+// ── Main data handler ─────────────────────────────────────────────────────────
+let _firstLoad = true;
+window.addEventListener('oxytrace:data', e => {
+  const d = e.detail;
+
+  updateHero(d.aqi, d.tier);
+  updateStats(d);
+
+  if (locEl) locEl.textContent = d.cityLabel || 'Located';
+  if (updatedEl) updatedEl.textContent = 'Updated '+ (d.fetchedAt||new Date()).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+
+  pushAlert(d.aqi, d.color);
+
+  // Toast on subsequent refreshes
+  if (!_firstLoad && !d.stale) {
+    const toast = document.getElementById('refresh-toast');
+    toast.classList.add('show');
+    setTimeout(()=>toast.classList.remove('show'), 2000);
+  }
+  _firstLoad = false;
+
+  // ML risk card
+  tryRenderMLCard();
+});
+
+// ── ML risk card (if profile exists) ─────────────────────────────────────────
+function tryRenderMLCard() {
+  try {
+    const raw = localStorage.getItem('oxtrace_health_profile');
+    if (!raw) return;
+    const prof = JSON.parse(raw);
+    // Get ML result from last session stored in localStorage
+    const riskPct = parseInt(localStorage.getItem('oxy_last_risk_pct'));
+    const riskClass = localStorage.getItem('oxy_last_risk_class') || '—';
+    const explanation = localStorage.getItem('oxy_last_risk_explanation') || 'Run the risk assessment to get personalised insights.';
+    if (isNaN(riskPct)) return;
+
+    const section = document.getElementById('ml-section');
+    if (section) section.style.display = 'block';
+
+    const color = riskPct<30?'var(--neon-green)':riskPct<60?'var(--neon-yellow)':'var(--neon-red)';
+    const mlRing = document.getElementById('ml-ring');
+    const mlPct  = document.getElementById('ml-pct');
+    const mlCls  = document.getElementById('ml-class');
+    const mlExp  = document.getElementById('ml-explanation');
+
+    if (mlRing) { mlRing.style.strokeDashoffset=314*(1-riskPct/100); mlRing.style.stroke=color; }
+    if (mlPct)  { mlPct.textContent=riskPct+'%'; mlPct.style.color=color; }
+    if (mlCls)  { mlCls.textContent=riskClass;   mlCls.style.color=color; }
+    if (mlExp)  { mlExp.textContent=explanation; }
+  } catch(_) {}
+}
+
+// ── postMessage from map iframe ───────────────────────────────────────────────
+window.addEventListener('message', e => {
+  if (!e.data || e.data.type!=='oxytrace-map') return;
+  const {userAqi, safePark} = e.data;
+  if (userAqi!=null && aqiEl && aqiEl.textContent==='--') {
+    // Approximate tier
+    const tier = { label:'⚠ MAP DATA', sub:'From map sensor', color:'#ffd700', glow:'rgba(255,215,0,.5)' };
+    updateHero(userAqi, tier);
+  }
+  if (safePark) {
+    const strip = document.getElementById('map-sync-strip');
+    const nameEl = document.getElementById('strip-park-name');
+    const aqiStripEl = document.getElementById('strip-safe-aqi');
+    const distEl = document.getElementById('strip-safe-dist');
+    if (nameEl) nameEl.textContent = safePark.name;
+    if (aqiStripEl) aqiStripEl.textContent = safePark.aqi ?? '—';
+    if (distEl) { const m=safePark.dist; distEl.textContent=m>=1000?(m/1000).toFixed(1)+' km away':Math.round(m)+' m away'; }
+    if (strip) strip.style.opacity='1';
+  }
+});
+
+// On load, try to render ML card from previous session
+tryRenderMLCard();
+
+// ── Public API for app.js's OxyTraceAPI compat ───────────────────────────────
+// app.js fires oxytrace:data directly so no separate init needed here
+</script>
+
+<!-- Override startMonitoring from app.js to also save ML results before dashboard -->
+<script>
+const _origStartMonitoring = typeof startMonitoring !== 'undefined' ? startMonitoring : null;
+// After app.js calls renderDashboard, save ML results for profile page
+const _origRenderDashboard = typeof renderDashboard !== 'undefined' ? renderDashboard : null;
+if (_origRenderDashboard) {
+  window.renderDashboard = function(riskData) {
+    _origRenderDashboard(riskData);
+    // Save for profile.html
+    try {
+      localStorage.setItem('oxy_last_risk_pct', riskData.riskPercentage);
+      localStorage.setItem('oxy_last_risk_class', riskData.riskClass);
+      localStorage.setItem('oxy_last_risk_explanation', riskData.explanation);
+    } catch(_) {}
+  };
+}
+</script>
+
+<script>window.GEMINI_API_KEY = '3c6018c1a469453181efdaa8bae424b0.dfiQs62RCvC5ZeFM';</script>
+<script src="chatbot.js"></script>
+</body>
+</html>

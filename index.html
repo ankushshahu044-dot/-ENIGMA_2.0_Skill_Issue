@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OxyTrace — AI Lung Health Monitor</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="ui.css">
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=IBM+Plex+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+  <style>
+    /* ── Redirect banner shown after profile is saved ── */
+    #profile-done-bar {
+      display: none;
+      position: fixed; top: 0; left: 0; right: 0; z-index: 9998;
+      background: linear-gradient(90deg,#00d4ff,#00ff88);
+      color: #070b0f; text-align: center;
+      padding: 14px 20px; font-weight: 700; font-size: 14px;
+      font-family: 'Orbitron', sans-serif; letter-spacing: 1px;
+    }
+    /* ── Nav link to live dashboard ── */
+    .go-live-btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 8px 20px; border-radius: 30px;
+      background: rgba(0,212,255,0.1); border: 1px solid rgba(0,212,255,0.35);
+      color: #00d4ff; font-family: 'Orbitron', sans-serif;
+      font-size: 11px; letter-spacing: 0.1em; text-decoration: none;
+      transition: background 0.2s, box-shadow 0.2s;
+    }
+    .go-live-btn:hover { background: rgba(0,212,255,0.2); box-shadow: 0 0 20px rgba(0,212,255,0.3); }
+  </style>
+</head>
+<body>
+
+  <!-- Auto-redirect notice (shown if user was already onboarded) -->
+  <div id="profile-done-bar">
+    ✅ Profile saved! Redirecting to Live Dashboard…
+  </div>
+
+  <!-- LOADING OVERLAY -->
+  <div id="loadingOverlay">
+    <div class="loader-box">
+      <div class="spinner"></div>
+      <div class="loader-text">OxyTrace AI is analysing your lung risk…</div>
+    </div>
+  </div>
+
+  <!-- ======= HEADER ======= -->
+  <header class="header">
+    <div class="header-left">
+      <div class="logo">
+        <span class="logo-icon">🫁</span>
+        <span class="logo-text">OxyTrace</span>
+      </div>
+      <div class="tagline">AI-Powered Lung Health Monitor</div>
+    </div>
+    <div class="header-right">
+      <div class="model-badge">
+        🤖 ML Accuracy: <span id="modelAccuracy">--</span>
+      </div>
+      <a href="profile.html" class="go-live-btn">
+        <span class="live-dot"></span> Live Dashboard
+      </a>
+    </div>
+  </header>
+
+  <!-- ======= ONBOARDING SECTION ======= -->
+  <section id="onboardingSection" class="section">
+    <div class="onboarding-container">
+      <div class="onboarding-header">
+        <h1>Know Your Air.<br>Protect Your Lungs.</h1>
+        <p>Enter your health profile and OxyTrace AI will give you a real-time personalised lung risk assessment based on your actual GPS location.</p>
+      </div>
+
+      <div class="form-card">
+        <h2 class="form-title">👤 Your Health Profile</h2>
+
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Full Name</label>
+            <input type="text" id="userName" placeholder="Enter your name">
+          </div>
+          <div class="form-group">
+            <label>Age</label>
+            <input type="number" id="userAge" placeholder="25" min="1" max="120">
+          </div>
+          <div class="form-group">
+            <label>City / Location <span style="font-size:0.75em;opacity:0.5">(auto-filled from GPS)</span></label>
+            <input type="text" id="userCity" placeholder="Auto-detecting from GPS…">
+          </div>
+          <div class="form-group">
+            <label>Gender</label>
+            <select id="userGender">
+              <option value="0">Male</option>
+              <option value="0.1">Female</option>
+              <option value="0">Other</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Do you smoke?</label>
+            <select id="userSmoke">
+              <option value="0">No</option>
+              <option value="1">Yes — Daily</option>
+              <option value="0.5">Occasionally</option>
+              <option value="0.2">Ex-smoker</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Pre-existing Condition</label>
+            <select id="userCondition">
+              <option value="0">None</option>
+              <option value="1">Asthma</option>
+              <option value="1">COPD</option>
+              <option value="0.7">Heart Disease</option>
+              <option value="0.5">Allergies</option>
+              <option value="0.8">Bronchitis</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Exercise Frequency</label>
+            <select id="userExercise">
+              <option value="3">Daily</option>
+              <option value="2">3–4× per week</option>
+              <option value="1">Rarely</option>
+              <option value="0">Never</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Work Environment</label>
+            <select id="userWork">
+              <option value="0">Office / Indoor</option>
+              <option value="1">Outdoor / Field</option>
+              <option value="0.8">Construction / Factory</option>
+              <option value="0.3">Work from Home</option>
+            </select>
+          </div>
+        </div>
+
+        <button class="btn-analyze" onclick="startMonitoring()">
+          <span>🔍 Analyse My Lung Risk</span>
+        </button>
+
+        <p style="text-align:center;margin-top:16px;font-size:0.8rem;opacity:0.4;">
+          Or go straight to the
+          <a href="profile.html" style="color:#00d4ff;text-decoration:none;">Live AQI Dashboard →</a>
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======= DASHBOARD SECTION ======= -->
+  <section id="dashboardSection" style="display:none" class="section">
+
+    <div class="dash-topbar">
+      <div class="user-greeting">
+        👋 Hello, <span id="dashUserName"></span>
+      </div>
+      <div class="dash-actions">
+        <a href="profile.html" class="go-live-btn" style="margin-right:8px">🌍 Live Dashboard</a>
+        <a href="health.html"  class="go-live-btn" style="margin-right:8px">🫁 Health Report</a>
+        <button class="btn-refresh" onclick="refreshAQI()">🔄 Refresh AQI</button>
+        <button class="btn-back"    onclick="resetProfile()">← Change Profile</button>
+      </div>
+    </div>
+
+    <!-- ROW 1: AQI + Risk Score + Alerts -->
+    <div class="dash-row">
+
+      <div class="dash-card aqi-card">
+        <div class="card-label">🌍 Real-Time Air Quality</div>
+        <div class="city-display" id="cityDisplay">--</div>
+        <div class="aqi-big">
+          <span class="aqi-number" id="aqiValue">--</span>
+          <span class="aqi-unit">AQI</span>
+        </div>
+        <div class="aqi-status-badge" id="aqiStatusBadge">Loading...</div>
+        <div class="pollutants-grid" id="pollutantsGrid"></div>
+        <div class="last-updated" id="lastUpdated">--</div>
+      </div>
+
+      <div class="dash-card risk-card">
+        <div class="card-label">🫁 Your Personal Lung Risk</div>
+        <div class="risk-circle-container">
+          <svg class="risk-svg" viewBox="0 0 120 120">
+            <circle class="risk-track"    cx="60" cy="60" r="50"/>
+            <circle class="risk-progress" id="riskCircle" cx="60" cy="60" r="50"
+              stroke-dasharray="314" stroke-dashoffset="314"/>
+          </svg>
+          <div class="risk-center-text">
+            <div class="risk-percent" id="riskPercentage">--%</div>
+            <div class="risk-label-small">Risk Score</div>
+          </div>
+        </div>
+        <div class="risk-class-badge" id="riskClassBadge">Calculating…</div>
+        <div class="risk-explanation" id="riskExplanation"></div>
+      </div>
+
+      <div class="dash-card alerts-card">
+        <div class="card-label">⚠️ Health Alerts &amp; Advice</div>
+        <div id="alertsContainer"></div>
+      </div>
+    </div>
+
+    <!-- ROW 2: Timeline + Community -->
+    <div class="dash-row">
+      <div class="dash-card timeline-card">
+        <div class="card-label">📊 Today's Pollution Exposure</div>
+        <div id="timelineContainer"></div>
+      </div>
+      <div class="dash-card analytics-card">
+        <div class="card-label">🏥 Community Health Analytics</div>
+        <div class="analytics-grid" id="analyticsGrid">
+          <div class="stat-loading">Loading community data…</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ROW 3: Tips -->
+    <div class="dash-card tips-card">
+      <div class="card-label">💡 Personalised Prevention Plan</div>
+      <div class="tips-grid" id="tipsGrid"></div>
+    </div>
+  </section>
+
+  <script src="firebase.js"></script>
+  <script src="app.js"></script>
+  <script>
+    // If already onboarded, auto-redirect to profile.html after 1.5 s
+    window.addEventListener('DOMContentLoaded', () => {
+      const onboarded = localStorage.getItem('oxy_onboarded');
+      if (onboarded === 'true') {
+        const bar = document.getElementById('profile-done-bar');
+        if (bar) bar.style.display = 'block';
+        setTimeout(() => { window.location.href = 'profile.html'; }, 1500);
+      }
+    });
+  </script>
+  <script>window.GEMINI_API_KEY = '3c6018c1a469453181efdaa8bae424b0.dfiQs62RCvC5ZeFM';</script>
+  <script src="chatbot.js"></script>
+</body>
+</html>
