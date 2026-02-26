@@ -3,12 +3,10 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>OxyTrace · Air Quality Map</title>
+  <title>OxyTrace · Mini Map Component</title>
 
-  <!-- Leaflet CSS -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
 
-  <!-- Google Fonts -->
   <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
 
   <style>
@@ -16,8 +14,8 @@
 
     :root {
       --bg: #070b12;
-      --panel: rgba(10, 16, 26, 0.88);
-      --border: rgba(0, 200, 255, 0.15);
+      --panel: rgba(10, 16, 26, 0.92);
+      --border: rgba(0, 200, 255, 0.2);
       --accent-blue: #00c8ff;
       --accent-red: #ff3b5c;
       --accent-green: #00e87a;
@@ -31,525 +29,153 @@
       overflow: hidden;
       background: var(--bg);
       font-family: 'Rajdhani', sans-serif;
-      color: var(--text);
     }
 
     #map {
-      width: 100vw;
-      height: 100vh;
-      position: fixed;
-      inset: 0;
+      width: 100%;
+      height: 100%;
       z-index: 0;
     }
 
-    /* ── HUD Header ── */
-    #hud-header {
-      position: fixed;
-      top: 0; left: 0; right: 0;
-      z-index: 800;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 14px 22px;
-      background: linear-gradient(180deg, rgba(7,11,18,0.95) 60%, transparent);
-      pointer-events: none;
-    }
-
-    .brand {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-
-    .brand-icon {
-      width: 34px; height: 34px;
-      border-radius: 8px;
-      background: linear-gradient(135deg, var(--accent-blue), #0066ff);
-      display: grid;
-      place-items: center;
-      font-size: 18px;
-    }
-
-    .brand-name {
-      font-size: 22px;
-      font-weight: 700;
-      letter-spacing: 2px;
-      color: #fff;
-    }
-
-    .brand-name span { color: var(--accent-blue); }
-
-    .brand-sub {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 10px;
-      letter-spacing: 3px;
-      color: var(--muted);
-      text-transform: uppercase;
-    }
-
-    .hud-time {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 11px;
-      color: var(--muted);
-      letter-spacing: 2px;
-    }
-
-    /* ── Legend Panel ── */
+    /* ── Compact Legend for Mini-Map ── */
     #legend {
       position: fixed;
-      bottom: 28px;
-      left: 22px;
+      bottom: 10px;
+      left: 10px;
       z-index: 800;
       background: var(--panel);
       border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 16px 20px;
-      backdrop-filter: blur(12px);
-      min-width: 210px;
-      box-shadow: 0 8px 32px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.05);
+      border-radius: 8px;
+      padding: 8px 12px;
+      backdrop-filter: blur(8px);
+      box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+      pointer-events: none;
     }
 
     #legend h3 {
-      font-size: 11px;
-      letter-spacing: 3px;
+      font-size: 9px;
+      letter-spacing: 2px;
       color: var(--muted);
       text-transform: uppercase;
-      margin-bottom: 12px;
-      padding-bottom: 8px;
+      margin-bottom: 6px;
       border-bottom: 1px solid var(--border);
+      padding-bottom: 4px;
     }
 
     .legend-item {
       display: flex;
       align-items: center;
-      gap: 10px;
-      margin-bottom: 9px;
-      font-size: 13px;
-      font-weight: 500;
-      letter-spacing: 0.5px;
-    }
-
-    .legend-item:last-child { margin-bottom: 0; }
-
-    .leg-dot {
-      width: 12px; height: 12px;
-      border-radius: 50%;
-      flex-shrink: 0;
-    }
-
-    .leg-dot.blue  { background: var(--accent-blue); box-shadow: 0 0 6px var(--accent-blue); }
-    .leg-dot.red   { background: var(--accent-red);  border: 2px solid var(--accent-red); border-radius: 2px; opacity: 0.8; }
-    .leg-dot.green { background: var(--accent-green); box-shadow: 0 0 6px var(--accent-green); }
-    .leg-line {
-      width: 20px; height: 2px;
-      border-top: 2px dashed var(--accent-yellow);
-      flex-shrink: 0;
-    }
-
-    /* ── AQI Chip ── */
-    #aqi-panel {
-      position: fixed;
-      top: 80px;
-      right: 22px;
-      z-index: 800;
-      background: var(--panel);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 14px 18px;
-      backdrop-filter: blur(12px);
-      text-align: center;
-      box-shadow: 0 8px 32px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.05);
-    }
-
-    #aqi-panel .label {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 10px;
-      letter-spacing: 3px;
-      color: var(--muted);
-      margin-bottom: 6px;
-    }
-
-    #aqi-panel .value {
-      font-size: 36px;
-      font-weight: 700;
-      line-height: 1;
-      color: var(--accent-red);
-    }
-
-    #aqi-panel .status {
+      gap: 8px;
+      margin-bottom: 5px;
       font-size: 11px;
-      color: var(--accent-red);
-      letter-spacing: 1px;
-      margin-top: 4px;
-      opacity: 0.8;
-    }
-
-    /* ── Status bar ── */
-    #status-bar {
-      position: fixed;
-      bottom: 28px;
-      right: 22px;
-      z-index: 800;
-      background: var(--panel);
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 10px 16px;
-      backdrop-filter: blur(12px);
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 11px;
-      color: var(--muted);
-      letter-spacing: 1px;
-    }
-
-    #status-bar .status-dot {
-      display: inline-block;
-      width: 7px; height: 7px;
-      border-radius: 50%;
-      background: var(--accent-green);
-      box-shadow: 0 0 6px var(--accent-green);
-      margin-right: 7px;
-      animation: pulse-dot 1.5s ease-in-out infinite;
-    }
-
-    @keyframes pulse-dot {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.3; }
-    }
-
-    /* ── Leaflet overrides ── */
-    .leaflet-control-zoom {
-      border: 1px solid var(--border) !important;
-      border-radius: 8px !important;
-      overflow: hidden;
-    }
-
-    .leaflet-control-zoom a {
-      background: var(--panel) !important;
-      color: var(--text) !important;
-      border-bottom: 1px solid var(--border) !important;
-    }
-
-    .leaflet-control-zoom a:hover {
-      background: rgba(0, 200, 255, 0.1) !important;
-      color: var(--accent-blue) !important;
-    }
-
-    .leaflet-control-attribution {
-      background: rgba(7, 11, 18, 0.7) !important;
-      color: var(--muted) !important;
-      font-size: 9px !important;
-    }
-
-    .leaflet-control-attribution a { color: var(--muted) !important; }
-
-    /* ── Glowing blue dot ── */
-    .user-dot-outer {
-      width: 20px; height: 20px;
-      border-radius: 50%;
-      background: rgba(0, 200, 255, 0.2);
-      border: 2px solid var(--accent-blue);
-      box-shadow: 0 0 0 4px rgba(0,200,255,0.15), 0 0 20px rgba(0,200,255,0.5);
-      animation: glow-pulse 2s ease-in-out infinite;
-      display: grid;
-      place-items: center;
-    }
-
-    .user-dot-inner {
-      width: 8px; height: 8px;
-      border-radius: 50%;
-      background: var(--accent-blue);
-      box-shadow: 0 0 8px var(--accent-blue);
-    }
-
-    @keyframes glow-pulse {
-      0%, 100% { box-shadow: 0 0 0 4px rgba(0,200,255,0.15), 0 0 20px rgba(0,200,255,0.4); }
-      50%       { box-shadow: 0 0 0 8px rgba(0,200,255,0.05), 0 0 30px rgba(0,200,255,0.7); }
-    }
-
-    /* ── Locate loading overlay ── */
-    #locate-overlay {
-      position: fixed;
-      inset: 0;
-      z-index: 999;
-      background: rgba(7,11,18,0.92);
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 18px;
-      transition: opacity 0.5s ease;
-    }
-
-    #locate-overlay.hidden { opacity: 0; pointer-events: none; }
-
-    .spinner {
-      width: 52px; height: 52px;
-      border-radius: 50%;
-      border: 2px solid rgba(0,200,255,0.15);
-      border-top-color: var(--accent-blue);
-      animation: spin 1s linear infinite;
-    }
-
-    @keyframes spin { to { transform: rotate(360deg); } }
-
-    .locate-text {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 12px;
-      letter-spacing: 3px;
-      color: var(--muted);
-    }
-
-    /* ── Layer Toggle ── */
-    #layer-toggle {
-      position: fixed;
-      top: 80px;
-      left: 22px;
-      z-index: 800;
-      display: flex;
-      border-radius: 10px;
-      overflow: hidden;
-      border: 1px solid var(--border);
-      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
-    }
-
-    .layer-btn {
-      padding: 9px 16px;
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 10px;
-      letter-spacing: 2px;
-      text-transform: uppercase;
-      background: var(--panel);
-      color: var(--muted);
-      border: none;
-      cursor: pointer;
-      transition: all 0.2s ease;
-      backdrop-filter: blur(12px);
-      border-right: 1px solid var(--border);
-    }
-
-    .layer-btn:last-child { border-right: none; }
-
-    .layer-btn.active {
-      background: rgba(0, 200, 255, 0.15);
-      color: var(--accent-blue);
-    }
-
-    .layer-btn:hover:not(.active) {
-      background: rgba(255,255,255,0.05);
+      font-weight: 600;
       color: var(--text);
     }
 
-    /* Safe zone popup style */
-    .leaflet-popup-content-wrapper {
-      background: var(--panel) !important;
-      border: 1px solid rgba(0, 232, 122, 0.3) !important;
-      border-radius: 10px !important;
-      color: var(--text) !important;
-      backdrop-filter: blur(12px);
-      box-shadow: 0 8px 24px rgba(0,0,0,0.5) !important;
+    .leg-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .leg-dot.blue  { background: var(--accent-blue); box-shadow: 0 0 5px var(--accent-blue); }
+    .leg-dot.red   { background: var(--accent-red); border: 1.5px solid var(--accent-red); border-radius: 2px; }
+    .leg-dot.green { background: var(--accent-green); box-shadow: 0 0 5px var(--accent-green); }
+    .leg-line { width: 15px; height: 0; border-top: 2px dashed var(--accent-yellow); }
+
+    /* ── User Marker Style ── */
+    .user-dot-outer {
+      width: 18px; height: 18px;
+      border-radius: 50%;
+      background: rgba(0, 200, 255, 0.2);
+      border: 2px solid var(--accent-blue);
+      box-shadow: 0 0 15px rgba(0,200,255,0.6);
+      animation: glow-pulse 2s ease-in-out infinite;
+      display: grid; place-items: center;
     }
-    .leaflet-popup-tip { background: var(--panel) !important; }
-    .leaflet-popup-content { font-family: 'Rajdhani', sans-serif; font-size: 14px; font-weight: 600; }
+    .user-dot-inner { width: 6px; height: 6px; border-radius: 50%; background: var(--accent-blue); }
+    @keyframes glow-pulse { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.1); opacity: 0.7; } }
+
+    /* ── Hide Leaflet Controls for Clean Look ── */
+    .leaflet-control-zoom, .leaflet-control-attribution { display: none !important; }
+
+    /* ── Loading Overlay ── */
+    #locate-overlay {
+      position: fixed; inset: 0; z-index: 999;
+      background: var(--bg); display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 12px;
+    }
+    #locate-overlay.hidden { display: none; }
+    .spinner { width: 30px; height: 30px; border: 2px solid var(--border); border-top-color: var(--accent-blue); border-radius: 50%; animation: spin 1s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
   </style>
 </head>
 <body>
 
-<!-- Locate overlay -->
 <div id="locate-overlay">
   <div class="spinner"></div>
-  <div class="locate-text">ACQUIRING GPS SIGNAL</div>
+  <p style="font-size: 10px; color: var(--muted); letter-spacing: 2px;">SYNCING GPS...</p>
 </div>
 
-<!-- Map -->
 <div id="map"></div>
 
-<!-- Header HUD -->
-<div id="hud-header">
-  <div class="brand">
-    <div class="brand-icon">🫁</div>
-    <div>
-      <div class="brand-name">OXY<span>TRACE</span></div>
-      <div class="brand-sub">Lung Health · Air Quality Monitor</div>
-    </div>
-  </div>
-  <div class="hud-time" id="clock"></div>
-</div>
-
-<!-- Layer Toggle -->
-<div id="layer-toggle">
-  <button class="layer-btn active" id="btn-dark" onclick="setLayer('dark')">🌑 Dark</button>
-  <button class="layer-btn" id="btn-satellite" onclick="setLayer('satellite')">🛰 Satellite</button>
-</div>
-
-<!-- AQI Panel -->
-<div id="aqi-panel">
-  <div class="label">NEARBY AQI</div>
-  <div class="value">158</div>
-  <div class="status">⚠ UNHEALTHY</div>
-</div>
-
-<!-- Legend -->
 <div id="legend">
-  <h3>Map Legend</h3>
-  <div class="legend-item"><div class="leg-dot blue"></div> Your Location</div>
-  <div class="legend-item"><div class="leg-dot red"></div> High AQI Zone (500m)</div>
-  <div class="legend-item"><div class="leg-dot green"></div> Safe Zone · Public Park</div>
-  <div class="legend-item"><div class="leg-line"></div> Navigation Route</div>
-</div>
-
-<!-- Status bar -->
-<div id="status-bar">
-  <span class="status-dot"></span>LIVE · GPS ACTIVE
-</div>
-
-<!-- Leaflet JS -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <h3>Navigation</h3>
+  <div class="legend-item"><div class="leg-dot blue"></div> User</div>
+  <div class="legend-item"><div class="leg-dot red"></div> Danger Zone</div>
+  <div class="legend-item"><div class="leg-dot green"></div> Safe Zone</div>
+  <div class="legend-item"><div class="leg-line"></div> Route</div>
+</div><script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 
 <script>
-  // ── Clock ──
-  const clock = document.getElementById('clock');
-  function tick() {
-    const now = new Date();
-    clock.textContent = now.toLocaleTimeString('en-US', { hour12: false }) + ' · ' +
-      now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).toUpperCase();
-  }
-  tick(); setInterval(tick, 1000);
+  const map = L.map('map', { zoomControl: false });
 
-  // ── Map init ──
-  const map = L.map('map', {
-    zoomControl: true,
-    attributionControl: true
-  });
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    maxZoom: 19
+  }).addTo(map);
 
-  // ── Tile Layers ──
-  const layers = {
-    dark: L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-      attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors © <a href="https://carto.com/attributions">CARTO</a>',
-      subdomains: 'abcd',
-      maxZoom: 19
-    }),
-    satellite: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-      attribution: '© Esri — Source: Esri, USGS, NOAA',
-      maxZoom: 19
-    })
-  };
-
-  // Start with dark layer
-  layers.dark.addTo(map);
-  let activeLayer = 'dark';
-
-  function setLayer(name) {
-    if (name === activeLayer) return;
-    map.removeLayer(layers[activeLayer]);
-    layers[name].addTo(map);
-    // Make sure overlays stay on top
-    map.eachLayer(l => { if (l !== layers[name]) l.bringToFront && l.bringToFront(); });
-    activeLayer = name;
-    document.getElementById('btn-dark').classList.toggle('active', name === 'dark');
-    document.getElementById('btn-satellite').classList.toggle('active', name === 'satellite');
-  }
-
-  // ── Custom Icons ──
   const userIcon = L.divIcon({
     className: '',
-    html: `<div class="user-dot-outer"><div class="user-dot-inner"></div></div>`,
-    iconSize: [20, 20],
-    iconAnchor: [10, 10]
+    html: <div class="user-dot-outer"><div class="user-dot-inner"></div></div>,
+    iconSize: [18, 18], iconAnchor: [9, 9]
   });
 
   const safeIcon = L.divIcon({
     className: '',
-    html: `<div style="
-      width:28px;height:28px;border-radius:50%;
-      background:rgba(0,232,122,0.2);
-      border:2px solid #00e87a;
-      box-shadow:0 0 12px rgba(0,232,122,0.6),0 0 24px rgba(0,232,122,0.3);
-      display:grid;place-items:center;
-      font-size:14px;
-    ">🌿</div>`,
-    iconSize: [28, 28],
-    iconAnchor: [14, 14]
+    html: <div style="width:22px;height:22px;border-radius:50%;background:rgba(0,232,122,0.2);border:2px solid #00e87a;box-shadow:0 0 10px #00e87a;display:grid;place-items:center;font-size:10px;">🌿</div>,
+    iconSize: [22, 22], iconAnchor: [11, 11]
   });
 
-  // ── Geolocation ──
-  const overlay = document.getElementById('locate-overlay');
-
   function initMap(lat, lng) {
-    overlay.classList.add('hidden');
+    document.getElementById('locate-overlay').classList.add('hidden');
 
-    map.setView([lat, lng], 15);
+    const pollutionLat = lat + 0.003;
+    const safeLat = lat - 0.003;
 
-    // User location marker
-    const userMarker = L.marker([lat, lng], { icon: userIcon }).addTo(map);
-    userMarker.bindPopup('<span style="color:#00c8ff">📍 You are here</span>');
+    // Center map to show both user and safe zone
+    const bounds = L.latLngBounds([[lat, lng], [safeLat, lng]]);
+    map.fitBounds(bounds, { padding: [40, 40] });
 
-    // High AQI zone — 500m north
-    const pollutionLat = lat + 0.0045; // ~500m north
-    const pollutionCenter = [pollutionLat, lng];
+    // User
+    L.marker([lat, lng], { icon: userIcon }).addTo(map);
 
-    L.circle(pollutionCenter, {
-      radius: 500,
-      color: '#ff3b5c',
-      weight: 1.5,
-      opacity: 0.9,
-      fillColor: '#ff3b5c',
-      fillOpacity: 0.12,
-      dashArray: '6 4'
-    }).addTo(map).bindPopup(`
-      <span style="color:#ff3b5c">⚠ High Pollution Zone</span><br>
-      <span style="font-size:12px;opacity:0.7">AQI 158 · PM2.5 elevated</span>
-    `);
-
-    // Red cross marker at pollution centre
-    L.circleMarker(pollutionCenter, {
-      radius: 5,
-      color: '#ff3b5c',
-      fillColor: '#ff3b5c',
-      fillOpacity: 1,
-      weight: 1
+    // Danger Zone
+    L.circle([pollutionLat, lng], {
+      radius: 300, color: '#ff3b5c', weight: 1, fillColor: '#ff3b5c', fillOpacity: 0.1, dashArray: '4 4'
     }).addTo(map);
 
-    // Safe Zone — slightly south
-    const safeLat = lat - 0.004;
-    const safeMarker = L.marker([safeLat, lng], { icon: safeIcon }).addTo(map);
-    safeMarker.bindPopup(`
-      <span style="color:#00e87a">✅ Safe Zone: Public Park</span><br>
-      <span style="font-size:12px;opacity:0.7">AQI 32 · Good air quality</span>
-    `);
+    // Safe Zone
+    L.marker([safeLat, lng], { icon: safeIcon }).addTo(map);
 
-    // Dashed yellow navigation line: user → safe zone
+    // Navigation Line
     L.polyline([[lat, lng], [safeLat, lng]], {
-      color: '#ffe944',
-      weight: 2.5,
-      opacity: 0.85,
-      dashArray: '10 8',
-      lineCap: 'round'
-    }).addTo(map);
-
-    // Arrowhead at safe zone end
-    L.circleMarker([safeLat, lng], {
-      radius: 4,
-      color: '#ffe944',
-      fillColor: '#ffe944',
-      fillOpacity: 0.5,
-      weight: 2
+      color: '#ffe944', weight: 2, opacity: 0.6, dashArray: '5 5'
     }).addTo(map);
   }
 
-  // Fallback coordinates (Mumbai as demo)
-  const FALLBACK = { lat: 19.076, lng: 72.8777 };
-
-  if ('geolocation' in navigator) {
+  // Real-time GPS check
+  if (navigator.geolocation) {
     navigator.geolocation.getCurrentPosition(
-      pos => initMap(pos.coords.latitude, pos.coords.longitude),
-      _err => {
-        console.warn('GPS denied — using fallback location');
-        initMap(FALLBACK.lat, FALLBACK.lng);
-      },
-      { timeout: 10000, maximumAge: 60000 }
+      p => initMap(p.coords.latitude, p.coords.longitude),
+      () => initMap(21.1458, 79.0882) // Fallback to Nagpur
     );
   } else {
-    initMap(FALLBACK.lat, FALLBACK.lng);
+    initMap(21.1458, 79.0882);
   }
 </script>
 </body>
