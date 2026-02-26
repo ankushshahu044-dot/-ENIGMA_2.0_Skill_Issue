@@ -337,39 +337,31 @@
         <div style="position:absolute;inset:0;border-radius:16px;border:1px solid rgba(0,212,255,0.25);pointer-events:none;z-index:2;"></div>
       </div>
 
-      <!-- Live safe-zone strip — populated via postMessage from map.html -->
+      <!-- Safe-zone info strip — compact, populated via postMessage from map.html -->
       <div id="map-sync-strip"
-           class="mt-2 rounded-xl px-4 py-2 flex items-center justify-between text-xs opacity-0 transition-opacity duration-500"
-           style="background: rgba(0,232,122,0.05); border: 1px solid rgba(0,232,122,0.15);">
-        <div class="flex items-center gap-2">
-          <span>🌿</span>
-          <span id="strip-park-name" class="font-orbitron" style="color: var(--neon-green); font-size:10px; letter-spacing:0.05em;">—</span>
-        </div>
-        <div class="flex items-center gap-3">
-          <span class="opacity-50">Safe Zone AQI:</span>
-          <span id="strip-safe-aqi" class="font-orbitron font-bold" style="color: var(--neon-green)">—</span>
-          <span class="opacity-50">·</span>
-          <span id="strip-safe-dist" style="color: var(--neon-yellow)">—</span>
-        </div>
+           class="mt-2 rounded-xl px-3 py-2 flex items-center gap-2 opacity-0 transition-opacity duration-500"
+           style="background: rgba(0,232,122,0.04); border: 1px solid rgba(0,232,122,0.12);">
+        <span style="font-size:13px; flex-shrink:0;">🌿</span>
+        <span id="strip-park-name"
+              class="truncate"
+              style="font-size:11px; color: var(--neon-green); opacity:0.85; flex:1; min-width:0;">—</span>
+        <span style="font-size:11px; opacity:0.35; flex-shrink:0;">AQI</span>
+        <span id="strip-safe-aqi"
+              style="font-size:12px; font-weight:600; color: var(--neon-green); flex-shrink:0;">—</span>
+        <span style="font-size:10px; opacity:0.25; flex-shrink:0;">·</span>
+        <span id="strip-safe-dist"
+              style="font-size:11px; color: var(--neon-yellow); flex-shrink:0;">—</span>
       </div>
     </section>
 
     <!-- ═══════════════════════════════════════════════════ ALERTS PREVIEW -->
-    <section class="mb-4">
-      <h2 class="font-orbitron text-xs tracking-widest opacity-50 uppercase mb-3">Recent Alerts</h2>
-      <div class="space-y-2">
-        <div class="stat-card rounded-xl px-4 py-3 flex items-center gap-3" style="border-color: rgba(255,68,68,0.3)">
-          <div class="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0" style="background: rgba(255,68,68,0.15)">
-            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="#ff4444" stroke-width="2">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
-            </svg>
-          </div>
-          <div class="flex-1 min-w-0">
-            <p class="text-sm font-medium" style="color: #ff6464">High PM2.5 Detected</p>
-            <p class="text-xs opacity-40 truncate">Spike near Flatbush Ave — 14 min ago</p>
-          </div>
-        </div>
-
+    <section id="alert-feed-section" class="mb-4">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="font-orbitron text-xs tracking-widest opacity-50 uppercase">Health Alerts</h2>
+        <span class="text-xs opacity-30">Live · via logic.js</span>
+      </div>
+      <div id="alert-feed" class="space-y-0">
+        <!-- Seeded with one static alert; logic.js prepends live ones above it -->
         <div class="stat-card rounded-xl px-4 py-3 flex items-center gap-3">
           <div class="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0" style="background: rgba(0,212,255,0.1)">
             <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="#00d4ff" stroke-width="2">
@@ -377,8 +369,8 @@
             </svg>
           </div>
           <div class="flex-1 min-w-0">
-            <p class="text-sm font-medium" style="color: var(--neon-blue)">Air Quality Improved</p>
-            <p class="text-xs opacity-40 truncate">Park Slope area cleared — 1 hr ago</p>
+            <p class="text-sm font-medium" style="color: var(--neon-blue)">Monitoring Started</p>
+            <p class="text-xs opacity-40 truncate">Waiting for live AQI data...</p>
           </div>
         </div>
       </div>
@@ -422,12 +414,15 @@
           <path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>
         </svg>
         <!-- Badge -->
-        <span class="absolute -top-1 -right-1 w-4 h-4 rounded-full text-center flex items-center justify-center" style="background: #ff4444; font-size: 9px; font-family: 'Orbitron';">2</span>
+        <span id="alert-badge" class="absolute -top-1 -right-1 w-4 h-4 rounded-full text-center flex items-center justify-center" style="background: #ff4444; font-size: 9px; font-family: 'Orbitron';">0</span>
       </div>
       <span class="text-xs opacity-40 font-orbitron" style="font-size: 9px; letter-spacing: 0.05em;">Alerts</span>
     </button>
 
   </nav>
+
+  <!-- OxyTrace Core Logic Engine -->
+  <script src="logic.js"></script>
 
   <script>
     // ─── ELEMENT REFS ────────────────────────────────────────────────────────────
@@ -530,6 +525,8 @@
 
         if (aqi === null) throw new Error('No AQI data returned');
         updateScreen(aqi);
+        // ── logic.js: personalised health risk + notifications + alert feed ──
+        if (window.OxyTrace) window.OxyTrace.onAQIReady(aqi);
       } catch (e) {
         console.error('AQI fetch failed:', e);
         if (statusEl)    statusEl.textContent   = '⚠ DATA ERROR';
@@ -570,6 +567,7 @@
           const aqi = airData?.current?.us_aqi ?? null;
           if (aqi === null) throw new Error('No AQI');
           updateScreen(aqi);
+          if (window.OxyTrace) window.OxyTrace.onAQIReady(aqi);
         } catch(e) {
           if (statusEl)    statusEl.textContent   = '⚠ DATA ERROR';
           if (statusSubEl) statusSubEl.textContent = 'Could not fetch air quality';
@@ -621,6 +619,8 @@
       // Sync the AQI ring + hero if map loaded before geolocation here
       if (userAqi != null && aqiNumberEl && aqiNumberEl.textContent === '--') {
         updateScreen(userAqi);
+        // logic.js: run health risk from map-sourced AQI
+        if (window.OxyTrace) window.OxyTrace.onAQIReady(userAqi);
       }
 
       // Populate the safe-zone sync strip under the map
