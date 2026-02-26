@@ -3,155 +3,44 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>OxyTrace · Profile Setup</title>
+  <title>OxyTrace · Profile</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=IBM+Plex+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=IBM+Plex+Mono:wght@300;400;500&display=swap" rel="stylesheet">
   <style>
-    :root { --neon-blue:#00d4ff; --neon-green:#00ff88; --neon-yellow:#ffd700; --bg-dark:#070b0f; --card-bg:#0d1520; }
-    *, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
-    .font-orbitron { font-family:'Orbitron',sans-serif; }
-    body {
-      font-family:'IBM Plex Mono',monospace;
-      background:var(--bg-dark); color:#e0f4ff;
-      min-height:100vh;
-      background-image:
-        radial-gradient(ellipse 80% 40% at 50% -5%,rgba(0,212,255,.07) 0%,transparent 65%),
-        linear-gradient(rgba(0,212,255,.025) 1px,transparent 1px),
-        linear-gradient(90deg,rgba(0,212,255,.025) 1px,transparent 1px);
-      background-size:100% 100%,32px 32px,32px 32px;
+    body { background-color: #070b0f; color: #e0f4ff; font-family: 'IBM Plex Mono', monospace; }
+    .font-orbitron { font-family: 'Orbitron', sans-serif; }
+    .input-field {
+      background: rgba(13, 21, 32, 0.6);
+      border: 1px solid rgba(0, 212, 255, 0.2);
     }
-    body::before { content:''; position:fixed; inset:0; background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.07) 2px,rgba(0,0,0,.07) 4px); pointer-events:none; z-index:9999; }
-
-    /* Step progress */
-    .step-progress { display:flex; align-items:center; gap:0; margin-bottom:32px; }
-    .step-node {
-      width:32px; height:32px; border-radius:50%;
-      display:flex; align-items:center; justify-content:center;
-      font-family:'Orbitron',sans-serif; font-size:11px; font-weight:700;
-      border:2px solid; flex-shrink:0; transition:all .3s;
-    }
-    .step-node.done  { background:var(--neon-blue); border-color:var(--neon-blue); color:#070b0f; box-shadow:0 0 12px rgba(0,212,255,.5); }
-    .step-node.active { background:rgba(0,212,255,.12); border-color:var(--neon-blue); color:var(--neon-blue); box-shadow:0 0 8px rgba(0,212,255,.3); }
-    .step-node.pending { background:transparent; border-color:rgba(255,255,255,.1); color:rgba(255,255,255,.2); }
-    .step-line { flex:1; height:1px; background:rgba(0,212,255,.12); margin:0 4px; }
-    .step-line.done { background:var(--neon-blue); box-shadow:0 0 4px rgba(0,212,255,.4); }
-    .step-label { font-size:8px; letter-spacing:.1em; margin-top:6px; opacity:.4; }
-
-    /* Card */
-    .setup-card {
-      background:rgba(13,21,32,.88); border:1px solid rgba(0,212,255,.14);
-      border-radius:20px; padding:32px 28px; max-width:400px; width:100%;
-      box-shadow:0 20px 50px rgba(0,0,0,.5), inset 0 1px 0 rgba(0,212,255,.06);
-      animation:card-in .6s cubic-bezier(.22,1,.36,1) both;
-    }
-    @keyframes card-in { from{opacity:0;transform:translateY(20px);} to{opacity:1;transform:none;} }
-
-    /* Avatar selector */
-    .avatar-grid { display:flex; gap:10px; flex-wrap:wrap; justify-content:center; margin:16px 0 24px; }
-    .avatar-opt {
-      width:52px; height:52px; border-radius:50%; border:2px solid rgba(255,255,255,.1);
-      display:flex; align-items:center; justify-content:center; font-size:22px;
-      cursor:pointer; transition:all .2s; background:rgba(255,255,255,.03);
-    }
-    .avatar-opt:hover { border-color:rgba(0,212,255,.4); transform:scale(1.08); background:rgba(0,212,255,.06); }
-    .avatar-opt.selected { border-color:var(--neon-blue); box-shadow:0 0 12px rgba(0,212,255,.35); background:rgba(0,212,255,.1); transform:scale(1.08); }
-
-    /* Form fields */
-    .fgroup { margin-bottom:16px; animation:fi .45s ease both; }
-    .fgroup:nth-child(1){animation-delay:.1s;} .fgroup:nth-child(2){animation-delay:.18s;} .fgroup:nth-child(3){animation-delay:.26s;}
-    @keyframes fi { from{opacity:0;transform:translateY(8px);} to{opacity:1;transform:none;} }
-    .flabel { display:block; font-size:9px; letter-spacing:.14em; color:rgba(0,212,255,.5); margin-bottom:5px; font-family:'Orbitron',sans-serif; }
-    .finput, .fselect {
-      width:100%; background:rgba(0,212,255,.03); border:1px solid rgba(0,212,255,.14);
-      border-radius:10px; padding:11px 13px; color:#e0f4ff;
-      font-family:'IBM Plex Mono',monospace; font-size:13px;
-      transition:border-color .25s,box-shadow .25s,background .25s; outline:none;
-    }
-    .finput::placeholder { color:rgba(0,212,255,.16); }
-    .finput:focus, .fselect:focus { border-color:var(--neon-blue); background:rgba(0,212,255,.05); box-shadow:0 0 0 3px rgba(0,212,255,.07),0 0 14px rgba(0,212,255,.08); }
-    .fselect { cursor:pointer; }
-    .fselect option { background:var(--card-bg); color:#e0f4ff; }
-
-    /* Activity selector chips */
-    .activity-chips { display:flex; flex-wrap:wrap; gap:8px; margin-top:6px; }
-    .achip {
-      padding:5px 12px; border-radius:999px; font-size:10px; letter-spacing:.06em;
-      border:1px solid rgba(255,255,255,.1); background:rgba(255,255,255,.03);
-      cursor:pointer; transition:all .2s; color:rgba(224,244,255,.45);
-    }
-    .achip:hover { border-color:rgba(0,212,255,.3); color:rgba(224,244,255,.7); }
-    .achip.sel { border-color:var(--neon-blue); background:rgba(0,212,255,.1); color:var(--neon-blue); box-shadow:0 0 6px rgba(0,212,255,.15); }
-
-    /* Submit */
-    .btn-next {
-      width:100%; margin-top:24px;
-      background:linear-gradient(135deg,rgba(0,212,255,.14),rgba(0,255,136,.09));
-      border:1px solid rgba(0,212,255,.32); border-radius:12px; padding:13px;
-      color:var(--neon-blue); font-family:'Orbitron',sans-serif; font-size:12px; font-weight:700; letter-spacing:.18em;
-      cursor:pointer; transition:all .25s; position:relative; overflow:hidden;
-    }
-    .btn-next:hover { transform:translateY(-2px); box-shadow:0 8px 24px rgba(0,212,255,.18),0 0 0 1px rgba(0,212,255,.38); }
-    .btn-next:active { transform:none; }
-    @keyframes spin { to{transform:rotate(360deg);} }
-    .btn-loading { pointer-events:none; }
-    .btn-loading .btxt { opacity:0; }
-    .btn-loading::after { content:''; position:absolute; top:50%; left:50%; width:15px; height:15px; margin:-7.5px 0 0 -7.5px; border:2px solid rgba(0,212,255,.25); border-top-color:var(--neon-blue); border-radius:50%; animation:spin .7s linear infinite; }
+    .input-field:focus { border-color: #00d4ff; outline: none; }
   </style>
 </head>
 <body class="flex flex-col items-center justify-center min-h-screen p-6">
 
-  <div class="setup-card">
-    <!-- Step progress -->
-    <div>
-      <div class="step-progress">
-        <div>
-          <div class="step-node done">✓</div>
-        </div>
-        <div class="step-line done"></div>
-        <div>
-          <div class="step-node active">1</div>
-        </div>
-        <div class="step-line pending"></div>
-        <div>
-          <div class="step-node pending">2</div>
-        </div>
-      </div>
-      <div style="display:flex;justify-content:space-between;margin-top:4px;margin-bottom:24px;">
-        <span style="font-size:8px;opacity:.3;letter-spacing:.08em;">ACCOUNT</span>
-        <span style="font-size:8px;color:var(--neon-blue);opacity:.7;letter-spacing:.08em;">IDENTITY</span>
-        <span style="font-size:8px;opacity:.3;letter-spacing:.08em;">MEDICAL</span>
-      </div>
-    </div>
+  <div class="w-full max-w-sm mb-8 flex gap-2">
+    <div class="h-1 flex-1 bg-cyan-500 rounded shadow-[0_0_10px_#00d4ff]"></div>
+    <div class="h-1 flex-1 bg-gray-800 rounded"></div>
+  </div>
 
-    <h2 class="font-orbitron text-xl font-bold mb-1" style="color:#e0f4ff;">User Identity</h2>
-    <p class="text-xs mb-6" style="opacity:.4;">Biometrics for personalized risk calibration.</p>
-
-    <!-- Avatar selector -->
-    <div>
-      <p class="flabel">SELECT AVATAR</p>
-      <div class="avatar-grid" id="avatar-grid">
-        <div class="avatar-opt selected" data-av="🧑" onclick="selAv(this)">🧑</div>
-        <div class="avatar-opt" data-av="👨‍⚕️" onclick="selAv(this)">👨‍⚕️</div>
-        <div class="avatar-opt" data-av="🧓" onclick="selAv(this)">🧓</div>
-        <div class="avatar-opt" data-av="🧒" onclick="selAv(this)">🧒</div>
-        <div class="avatar-opt" data-av="🧑‍🔬" onclick="selAv(this)">🧑‍🔬</div>
+  <div class="w-full max-w-sm">
+    <h2 class="text-2xl font-orbitron text-white mb-2">User Identity</h2>
+    <p class="text-gray-400 text-xs mb-8">Basic biometrics for risk calibration.</p>
+    
+    <form onsubmit="saveDetails(event)" class="space-y-5">
+      <div>
+        <label class="block text-[10px] text-cyan-500 mb-1 tracking-wider">FULL NAME</label>
+        <input type="text" id="name" required class="input-field w-full rounded p-3 text-white">
       </div>
-    </div>
-
-    <form onsubmit="saveDetails(event)">
-      <div class="fgroup">
-        <label class="flabel">FULL NAME</label>
-        <input type="text" id="name" class="finput" placeholder="Your name" required>
-      </div>
-
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;" class="fgroup">
+      
+      <div class="grid grid-cols-2 gap-4">
         <div>
-          <label class="flabel">AGE</label>
-          <input type="number" id="age" class="finput" placeholder="Years" min="1" max="120" required>
+          <label class="block text-[10px] text-cyan-500 mb-1 tracking-wider">AGE</label>
+          <input type="number" id="age" required class="input-field w-full rounded p-3 text-white">
         </div>
         <div>
-          <label class="flabel">GENDER</label>
-          <select id="gender" class="fselect finput">
+          <label class="block text-[10px] text-cyan-500 mb-1 tracking-wider">GENDER</label>
+          <select id="gender" class="input-field w-full rounded p-3 text-white bg-[#0d1520]">
             <option>Male</option>
             <option>Female</option>
             <option>Non-binary</option>
@@ -160,68 +49,25 @@
         </div>
       </div>
 
-      <div class="fgroup">
-        <label class="flabel">CITY / REGION</label>
-        <input type="text" id="city" class="finput" placeholder="Auto-detected or enter manually">
-      </div>
-
-      <div class="fgroup">
-        <label class="flabel">TYPICAL ACTIVITY LEVEL</label>
-        <div class="activity-chips">
-          <div class="achip sel" onclick="togChip(this)">Sedentary</div>
-          <div class="achip" onclick="togChip(this)">Light Active</div>
-          <div class="achip" onclick="togChip(this)">Moderate</div>
-          <div class="achip" onclick="togChip(this)">Very Active</div>
-          <div class="achip" onclick="togChip(this)">Athlete</div>
-        </div>
-      </div>
-
-      <button type="submit" class="btn-next" id="btn-next">
-        <span class="btxt">NEXT STEP →</span>
+      <button type="submit" class="w-full bg-cyan-500 hover:bg-cyan-400 text-black font-bold font-orbitron py-3.5 rounded mt-8 transition-colors">
+        NEXT STEP →
       </button>
     </form>
   </div>
 
-<script>
-let selectedAvatar = '🧑';
-function selAv(el) {
-  document.querySelectorAll('.avatar-opt').forEach(e=>e.classList.remove('selected'));
-  el.classList.add('selected');
-  selectedAvatar = el.dataset.av;
-}
-function togChip(el) {
-  document.querySelectorAll('.achip').forEach(e=>e.classList.remove('sel'));
-  el.classList.add('sel');
-}
-
-// Auto-detect city via geolocation + reverse geocoding
-if (navigator.geolocation) {
-  navigator.geolocation.getCurrentPosition(pos => {
-    const {latitude:lat, longitude:lng} = pos.coords;
-    fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`)
-      .then(r=>r.json())
-      .then(d=>{
-        const city = d.address?.city || d.address?.town || d.address?.village || '';
-        const country = d.address?.country || '';
-        const cityInput = document.getElementById('city');
-        if (cityInput && !cityInput.value) cityInput.value = [city, country].filter(Boolean).join(', ');
-      }).catch(()=>{});
-  }, ()=>{});
-}
-
-function saveDetails(e) {
-  e.preventDefault();
-  const btn = document.getElementById('btn-next');
-  btn.classList.add('btn-loading');
-  const activity = document.querySelector('.achip.sel')?.textContent || 'Sedentary';
-  localStorage.setItem('oxy_username', document.getElementById('name').value);
-  localStorage.setItem('oxy_age', document.getElementById('age').value);
-  localStorage.setItem('oxy_gender', document.getElementById('gender').value);
-  localStorage.setItem('oxy_city', document.getElementById('city').value);
-  localStorage.setItem('oxy_activity', activity);
-  localStorage.setItem('oxy_avatar', selectedAvatar);
-  setTimeout(()=>window.location.href='health-survey.html', 800);
-}
-</script>
+  <script>
+    function saveDetails(e) {
+      e.preventDefault();
+      const name = document.getElementById('name').value;
+      const age = document.getElementById('age').value;
+      
+      // Save locally
+      localStorage.setItem('oxy_username', name);
+      localStorage.setItem('oxy_age', age);
+      
+      // Go to Step 3
+      window.location.href = 'health-survey.html';
+    }
+  </script>
 </body>
 </html>
