@@ -1,0 +1,100 @@
+/*
+================================================================
+  ui.css — OxyTrace Visual Customization Layer
+  ⚡ THIS IS WHERE YOUR UI TEAM MAKES MAGIC
+  Everything visual can be overridden here
+================================================================
+*/
+
+/*
+  AVAILABLE CSS VARIABLES TO CUSTOMIZE:
+  
+  Colors → change gradients, card colors, accent colors
+  Typography → font sizes, weights, letter spacing
+  Spacing → card padding, border radius
+  Animations → hover effects, transitions
+  
+  All base layout is in style.css
+  This file OVERRIDES anything in style.css
+*/
+
+/* ── GLOBAL THEME ─────────────────────────────────────────── */
+/* Change body background here */
+body {
+  /* Example: mesh gradient background */
+  background: 
+    radial-gradient(ellipse at 20% 50%, rgba(0, 60, 120, 0.3) 0%, transparent 60%),
+    radial-gradient(ellipse at 80% 20%, rgba(120, 0, 180, 0.2) 0%, transparent 60%),
+    #080818;
+}
+
+/* ── LOGO ─────────────────────────────────────────────────── */
+/* Customize the OxyTrace logo colors here */
+.logo-text {
+  background: linear-gradient(90deg, #00d4ff, #7b2fff);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* ── CARDS ────────────────────────────────────────────────── */
+/* All dashboard cards */
+.dash-card {
+  /* Add glassmorphism, shadows, etc here */
+  box-shadow: 0 4px 24px rgba(0,0,0,0.3);
+}
+
+/* Hover effect on cards */
+.dash-card:hover {
+  border-color: rgba(0, 212, 255, 0.15);
+  transition: border-color 0.3s;
+}
+
+/* ── BUTTON ───────────────────────────────────────────────── */
+/* Main analyze button */
+.btn-analyze {
+  /* Add glow, gradient changes etc here */
+  box-shadow: 0 0 20px rgba(0, 212, 255, 0.1);
+}
+
+/* ── AQI CARD SPECIAL STYLING ─────────────────────────────── */
+.aqi-card {
+  /* Add special border or glow to AQI card */
+}
+
+/* ── RISK CARD SPECIAL STYLING ────────────────────────────── */
+.risk-card {
+  /* Customize risk card appearance */
+}
+
+/* ── ONBOARDING PAGE ──────────────────────────────────────── */
+.form-card {
+  /* Customize form card appearance */
+  box-shadow: 0 8px 40px rgba(0,0,0,0.4);
+}
+
+/* ── ANIMATIONS ───────────────────────────────────────────── */
+/* Add entrance animations here */
+.dash-card {
+  animation: fadeInUp 0.5s ease both;
+}
+
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ── TIPS CARDS ───────────────────────────────────────────── */
+.tip-card:hover {
+  background: rgba(255,255,255,0.07);
+  transform: translateY(-3px);
+  transition: all 0.25s;
+}
+
+/*
+  UI TEAM NOTES:
+  - Do NOT touch index.html structure
+  - Do NOT touch app.js or firebase.js
+  - You can add fonts using @import here
+  - You can add any new visual classes here
+  - Reference: style.css for all class names
+*/
