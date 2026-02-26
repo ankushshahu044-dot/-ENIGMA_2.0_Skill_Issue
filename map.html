@@ -3,25 +3,51 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>OxyTrace · Mini Map Component</title>
+  <title>OxyTrace · Air Quality Map</title>
 
+  <!-- Leaflet CSS -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
 
+  <!-- Google Fonts -->
   <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
 
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+    /* ── Dark Mode (default) ── */
     :root {
       --bg: #070b12;
-      --panel: rgba(10, 16, 26, 0.92);
-      --border: rgba(0, 200, 255, 0.2);
+      --panel: rgba(10, 16, 26, 0.88);
+      --panel-solid: #0a101a;
+      --border: rgba(0, 200, 255, 0.15);
+      --header-grad: rgba(7,11,18,0.95);
       --accent-blue: #00c8ff;
       --accent-red: #ff3b5c;
       --accent-green: #00e87a;
       --accent-yellow: #ffe944;
       --text: #c8dff0;
       --muted: #4a6680;
+      --zoom-bg: rgba(10,16,26,0.88);
+      --zoom-border: rgba(0,200,255,0.15);
+      --attrib-bg: rgba(7,11,18,0.7);
+    }
+
+    /* ── Light Mode ── */
+    body.light {
+      --bg: #f0f4f8;
+      --panel: rgba(255, 255, 255, 0.92);
+      --panel-solid: #ffffff;
+      --border: rgba(0, 120, 200, 0.2);
+      --header-grad: rgba(240,244,248,0.97);
+      --accent-blue: #0077cc;
+      --accent-red: #e02040;
+      --accent-green: #00a855;
+      --accent-yellow: #d4900a;
+      --text: #1a2c3d;
+      --muted: #6b8299;
+      --zoom-bg: rgba(255,255,255,0.92);
+      --zoom-border: rgba(0,120,200,0.2);
+      --attrib-bg: rgba(240,244,248,0.85);
     }
 
     html, body {
@@ -29,154 +55,654 @@
       overflow: hidden;
       background: var(--bg);
       font-family: 'Rajdhani', sans-serif;
+      color: var(--text);
+      transition: background 0.3s ease, color 0.3s ease;
     }
 
     #map {
-      width: 100%;
-      height: 100%;
+      width: 100vw;
+      height: 100vh;
+      position: fixed;
+      inset: 0;
       z-index: 0;
     }
 
-    /* ── Compact Legend for Mini-Map ── */
-    #legend {
+    /* ── HUD Header — hidden when embedded in iframe ── */
+    #hud-header {
       position: fixed;
-      bottom: 10px;
-      left: 10px;
+      top: 0; left: 0; right: 0;
       z-index: 800;
-      background: var(--panel);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 8px 12px;
-      backdrop-filter: blur(8px);
-      box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 22px;
+      background: linear-gradient(180deg, var(--header-grad) 60%, transparent);
       pointer-events: none;
     }
 
+    /* Hide header & status bar when embedded */
+    body.embedded #hud-header,
+    body.embedded #status-bar { display: none !important; }
+
+    /* Compact HUDs when embedded */
+    body.embedded #aqi-panel  { top: 8px; right: 8px; padding: 8px 12px; }
+    body.embedded #layer-toggle { top: 8px; left: 8px; }
+    body.embedded #theme-toggle { top: 58px; left: 8px; }
+    body.embedded #legend      { bottom: 8px; left: 8px; padding: 10px 14px; }
+    body.embedded #safe-zone-card { bottom: 8px; }
+
+    .brand { display: flex; align-items: center; gap: 10px; }
+    .brand-icon {
+      width: 34px; height: 34px; border-radius: 8px;
+      background: linear-gradient(135deg, var(--accent-blue), #0066ff);
+      display: grid; place-items: center; font-size: 18px;
+    }
+    .brand-name { font-size: 22px; font-weight: 700; letter-spacing: 2px; color: var(--text); }
+    .brand-name span { color: var(--accent-blue); }
+    .brand-sub {
+      font-family: 'JetBrains Mono', monospace; font-size: 10px;
+      letter-spacing: 3px; color: var(--muted); text-transform: uppercase;
+    }
+    .hud-time { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--muted); letter-spacing: 2px; }
+
+    /* ── Legend Panel ── */
+    #legend {
+      position: fixed; bottom: 28px; left: 22px; z-index: 800;
+      background: var(--panel); border: 1px solid var(--border);
+      border-radius: 12px; padding: 16px 20px; backdrop-filter: blur(12px);
+      min-width: 210px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.05);
+    }
     #legend h3 {
-      font-size: 9px;
-      letter-spacing: 2px;
-      color: var(--muted);
-      text-transform: uppercase;
-      margin-bottom: 6px;
+      font-size: 11px; letter-spacing: 3px; color: var(--muted);
+      text-transform: uppercase; margin-bottom: 12px; padding-bottom: 8px;
       border-bottom: 1px solid var(--border);
-      padding-bottom: 4px;
     }
+    .legend-item { display: flex; align-items: center; gap: 10px; margin-bottom: 9px; font-size: 13px; font-weight: 500; letter-spacing: 0.5px; }
+    .legend-item:last-child { margin-bottom: 0; }
+    .leg-dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
+    .leg-dot.blue  { background: var(--accent-blue);  box-shadow: 0 0 6px var(--accent-blue); }
+    .leg-dot.red   { background: var(--accent-red);   border: 2px solid var(--accent-red); border-radius: 2px; opacity: 0.8; }
+    .leg-dot.green { background: var(--accent-green); box-shadow: 0 0 6px var(--accent-green); }
+    .leg-line { width: 20px; height: 2px; border-top: 2px dashed var(--accent-yellow); flex-shrink: 0; }
 
-    .legend-item {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin-bottom: 5px;
-      font-size: 11px;
-      font-weight: 600;
-      color: var(--text);
+    /* ── AQI Chip ── */
+    #aqi-panel {
+      position: fixed; top: 80px; right: 22px; z-index: 800;
+      background: var(--panel); border: 1px solid var(--border);
+      border-radius: 12px; padding: 14px 18px; backdrop-filter: blur(12px);
+      text-align: center;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.05);
     }
+    #aqi-panel .label { font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 3px; color: var(--muted); margin-bottom: 6px; }
+    #aqi-panel .value { font-size: 36px; font-weight: 700; line-height: 1; color: var(--accent-red); }
+    #aqi-panel .status { font-size: 11px; color: var(--accent-red); letter-spacing: 1px; margin-top: 4px; opacity: 0.8; }
 
-    .leg-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
-    .leg-dot.blue  { background: var(--accent-blue); box-shadow: 0 0 5px var(--accent-blue); }
-    .leg-dot.red   { background: var(--accent-red); border: 1.5px solid var(--accent-red); border-radius: 2px; }
-    .leg-dot.green { background: var(--accent-green); box-shadow: 0 0 5px var(--accent-green); }
-    .leg-line { width: 15px; height: 0; border-top: 2px dashed var(--accent-yellow); }
-
-    /* ── User Marker Style ── */
-    .user-dot-outer {
-      width: 18px; height: 18px;
-      border-radius: 50%;
-      background: rgba(0, 200, 255, 0.2);
-      border: 2px solid var(--accent-blue);
-      box-shadow: 0 0 15px rgba(0,200,255,0.6);
-      animation: glow-pulse 2s ease-in-out infinite;
-      display: grid; place-items: center;
+    /* ── Status bar ── */
+    #status-bar {
+      position: fixed; bottom: 28px; right: 22px; z-index: 800;
+      background: var(--panel); border: 1px solid var(--border);
+      border-radius: 10px; padding: 10px 16px; backdrop-filter: blur(12px);
+      font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--muted); letter-spacing: 1px;
     }
-    .user-dot-inner { width: 6px; height: 6px; border-radius: 50%; background: var(--accent-blue); }
-    @keyframes glow-pulse { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.1); opacity: 0.7; } }
+    #status-bar .status-dot {
+      display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+      background: var(--accent-green); box-shadow: 0 0 6px var(--accent-green);
+      margin-right: 7px; animation: pulse-dot 1.5s ease-in-out infinite;
+    }
+    @keyframes pulse-dot { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
 
-    /* ── Hide Leaflet Controls for Clean Look ── */
-    .leaflet-control-zoom, .leaflet-control-attribution { display: none !important; }
+    /* ── Leaflet overrides ── */
+    .leaflet-control-zoom { border: 1px solid var(--zoom-border) !important; border-radius: 8px !important; overflow: hidden; }
+    .leaflet-control-zoom a { background: var(--zoom-bg) !important; color: var(--text) !important; border-bottom: 1px solid var(--zoom-border) !important; }
+    .leaflet-control-zoom a:hover { background: rgba(0,120,200,0.1) !important; color: var(--accent-blue) !important; }
+    .leaflet-control-attribution { background: var(--attrib-bg) !important; color: var(--muted) !important; font-size: 9px !important; }
+    .leaflet-control-attribution a { color: var(--muted) !important; }
 
-    /* ── Loading Overlay ── */
+    /* ── Directional User Marker ── */
+    .user-marker-wrap { position: relative; width: 48px; height: 48px; display: flex; align-items: center; justify-content: center; }
+    .user-beam { position: absolute; top: -16px; left: 50%; transform: translateX(-50%); width: 0; height: 0; border-left: 13px solid transparent; border-right: 13px solid transparent; border-bottom: 22px solid rgba(0,200,255,0.22); filter: blur(1px); }
+    .user-ring { position: absolute; width: 44px; height: 44px; border-radius: 50%; background: rgba(0,200,255,0.07); border: 1.5px solid rgba(0,200,255,0.28); animation: ring-pulse 2.2s ease-in-out infinite; }
+    .user-dot { position: relative; width: 20px; height: 20px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #5ae0ff, #0088cc); border: 2.5px solid #fff; box-shadow: 0 0 0 3px rgba(0,200,255,0.35), 0 2px 8px rgba(0,0,0,0.5); z-index: 2; }
+    .user-arrow { position: absolute; top: -8px; left: 50%; transform: translateX(-50%); width: 0; height: 0; border-left: 6px solid transparent; border-right: 6px solid transparent; border-bottom: 10px solid #fff; z-index: 3; filter: drop-shadow(0 0 3px rgba(0,200,255,0.9)); }
+    @keyframes ring-pulse { 0%,100% { transform: scale(1); opacity: 0.6; } 50% { transform: scale(1.3); opacity: 0.15; } }
+
+    /* ── Locate loading overlay ── */
     #locate-overlay {
       position: fixed; inset: 0; z-index: 999;
-      background: var(--bg); display: flex; flex-direction: column;
-      align-items: center; justify-content: center; gap: 12px;
+      background: rgba(7,11,18,0.92);
+      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px;
+      transition: opacity 0.5s ease;
     }
-    #locate-overlay.hidden { display: none; }
-    .spinner { width: 30px; height: 30px; border: 2px solid var(--border); border-top-color: var(--accent-blue); border-radius: 50%; animation: spin 1s linear infinite; }
+    #locate-overlay.hidden { opacity: 0; pointer-events: none; }
+    .spinner { width: 52px; height: 52px; border-radius: 50%; border: 2px solid rgba(0,200,255,0.15); border-top-color: var(--accent-blue); animation: spin 1s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
+    .locate-text { font-family: 'JetBrains Mono', monospace; font-size: 12px; letter-spacing: 3px; color: var(--muted); }
+
+    /* ── Theme Toggle ── */
+    #theme-toggle {
+      position: fixed; top: 130px; left: 22px; z-index: 800;
+      display: flex; align-items: center; gap: 7px; padding: 9px 16px;
+      background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+      cursor: pointer; font-family: 'JetBrains Mono', monospace; font-size: 10px;
+      letter-spacing: 2px; color: var(--muted); backdrop-filter: blur(12px);
+      box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+      transition: background 0.25s, color 0.25s, border-color 0.25s, box-shadow 0.25s;
+      user-select: none;
+    }
+    #theme-toggle:hover { color: var(--accent-blue); border-color: var(--accent-blue); box-shadow: 0 4px 20px rgba(0,120,200,0.2); }
+
+    /* ── Layer Toggle ── */
+    #layer-toggle {
+      position: fixed; top: 80px; left: 22px; z-index: 800;
+      display: flex; border-radius: 10px; overflow: hidden;
+      border: 1px solid var(--border); box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    }
+    .layer-btn {
+      padding: 9px 16px; font-family: 'JetBrains Mono', monospace; font-size: 10px;
+      letter-spacing: 2px; text-transform: uppercase; background: var(--panel); color: var(--muted);
+      border: none; cursor: pointer; transition: all 0.2s ease; backdrop-filter: blur(12px);
+      border-right: 1px solid var(--border);
+    }
+    .layer-btn:last-child { border-right: none; }
+    .layer-btn.active { background: rgba(0,200,255,0.15); color: var(--accent-blue); }
+    .layer-btn:hover:not(.active) { background: rgba(255,255,255,0.05); color: var(--text); }
+
+    /* ── Safe Zone Card ── */
+    #safe-zone-card {
+      position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%); z-index: 800;
+      background: var(--panel); border: 1px solid rgba(0,232,122,0.3); border-radius: 14px;
+      padding: 14px 22px; backdrop-filter: blur(14px);
+      box-shadow: 0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px rgba(0,232,122,0.08), inset 0 1px 0 rgba(255,255,255,0.05);
+      display: flex; align-items: center; gap: 20px; white-space: nowrap;
+      opacity: 0; pointer-events: none;
+      transition: opacity 0.4s ease, transform 0.4s ease;
+      transform: translateX(-50%) translateY(10px);
+    }
+    #safe-zone-card.visible { opacity: 1; pointer-events: auto; transform: translateX(-50%) translateY(0); }
+    .szc-icon { font-size: 22px; line-height: 1; }
+    .szc-divider { width: 1px; height: 32px; background: rgba(0,232,122,0.2); }
+    .szc-block { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+    .szc-label { font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 2.5px; color: var(--muted); text-transform: uppercase; }
+    .szc-value { font-size: 18px; font-weight: 700; line-height: 1; }
+    .szc-value.green { color: var(--accent-green); }
+    .szc-value.yellow { color: var(--accent-yellow); }
+    .szc-sub { font-size: 10px; color: var(--muted); letter-spacing: 0.5px; }
+
+    /* Popup overrides */
+    .leaflet-popup-content-wrapper { background: var(--panel) !important; border: 1px solid rgba(0,232,122,0.3) !important; border-radius: 10px !important; color: var(--text) !important; backdrop-filter: blur(12px); box-shadow: 0 8px 24px rgba(0,0,0,0.5) !important; }
+    .leaflet-popup-tip { background: var(--panel) !important; }
+    .leaflet-popup-content { font-family: 'Rajdhani', sans-serif; font-size: 14px; font-weight: 600; }
+
+    /* Smooth transitions */
+    #hud-header, #legend, #aqi-panel, #status-bar, #safe-zone-card, #layer-toggle, .layer-btn,
+    .leaflet-control-zoom a, .leaflet-control-attribution {
+      transition: background 0.3s ease, border-color 0.3s ease, color 0.3s ease, box-shadow 0.3s ease;
+    }
   </style>
 </head>
 <body>
 
+<!-- Locate overlay -->
 <div id="locate-overlay">
   <div class="spinner"></div>
-  <p style="font-size: 10px; color: var(--muted); letter-spacing: 2px;">SYNCING GPS...</p>
+  <div class="locate-text">ACQUIRING GPS SIGNAL</div>
 </div>
 
+<!-- Map -->
 <div id="map"></div>
 
+<!-- Header HUD (hidden when embedded) -->
+<div id="hud-header">
+  <div class="brand">
+    <div class="brand-icon">🫁</div>
+    <div>
+      <div class="brand-name">OXY<span>TRACE</span></div>
+      <div class="brand-sub">Lung Health · Air Quality Monitor</div>
+    </div>
+  </div>
+  <div class="hud-time" id="clock"></div>
+</div>
+
+<!-- Layer Toggle -->
+<div id="layer-toggle">
+  <button class="layer-btn active" id="btn-dark" onclick="setLayer('dark')">🌑 Dark</button>
+  <button class="layer-btn" id="btn-satellite" onclick="setLayer('satellite')">🛰 Satellite</button>
+</div>
+
+<!-- Theme toggle -->
+<div id="theme-toggle" onclick="toggleTheme()" title="Toggle Light / Dark Mode">
+  <span id="theme-icon">☀️</span>
+  <span id="theme-label">LIGHT</span>
+</div>
+
+<!-- AQI Panel -->
+<div id="aqi-panel">
+  <div class="label">YOUR AQI</div>
+  <div class="value" id="aqi-value">—</div>
+  <div class="status" id="aqi-status">LOADING...</div>
+</div>
+
+<!-- Legend -->
 <div id="legend">
-  <h3>Navigation</h3>
-  <div class="legend-item"><div class="leg-dot blue"></div> User</div>
-  <div class="legend-item"><div class="leg-dot red"></div> Danger Zone</div>
-  <div class="legend-item"><div class="leg-dot green"></div> Safe Zone</div>
-  <div class="legend-item"><div class="leg-line"></div> Route</div>
-</div><script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <h3>Map Legend</h3>
+  <div class="legend-item"><div class="leg-dot blue"></div> Your Location</div>
+  <div class="legend-item"><div class="leg-dot red"></div> High AQI Zone (500m)</div>
+  <div class="legend-item"><div class="leg-dot green"></div> Safe Zone · Public Park</div>
+  <div class="legend-item"><div class="leg-line"></div> Navigation Route</div>
+</div>
+
+<!-- Safe Zone Card -->
+<div id="safe-zone-card">
+  <div class="szc-icon">🌿</div>
+  <div class="szc-block">
+    <div class="szc-label">RECOMMENDED · AQI ≤ 80</div>
+    <div class="szc-value green" id="szc-park-name" style="font-size:13px;font-weight:600;">Searching...</div>
+  </div>
+  <div class="szc-divider"></div>
+  <div class="szc-block">
+    <div class="szc-label">AQI</div>
+    <div class="szc-value green" id="szc-aqi">—</div>
+    <div class="szc-sub" id="szc-aqi-cat">LOADING</div>
+  </div>
+  <div class="szc-divider"></div>
+  <div class="szc-block">
+    <div class="szc-label">Distance</div>
+    <div class="szc-value yellow" id="szc-dist">—</div>
+    <div class="szc-sub">FROM YOU</div>
+  </div>
+</div>
+
+<!-- Status bar (hidden when embedded) -->
+<div id="status-bar">
+  <span class="status-dot"></span>LIVE · GPS ACTIVE
+</div>
+
+<!-- Leaflet JS -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 
 <script>
-  const map = L.map('map', { zoomControl: false });
+  // ── Detect if running inside an iframe ──────────────────────────────────────
+  const IS_EMBEDDED = window.self !== window.top;
+  if (IS_EMBEDDED) document.body.classList.add('embedded');
 
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-    maxZoom: 19
-  }).addTo(map);
+  // ── postMessage bridge: send data to parent (index.html) ──────────────────
+  function notifyParent(userAqi, safePark) {
+    if (!IS_EMBEDDED) return;
+    try {
+      window.parent.postMessage({
+        type: 'oxytrace-map',
+        userAqi,
+        safePark: safePark ? {
+          name: safePark.name,
+          aqi:  safePark.aqi,
+          dist: safePark.dist
+        } : null
+      }, '*');
+    } catch(e) {}
+  }
 
-  const userIcon = L.divIcon({
-    className: '',
-    html: <div class="user-dot-outer"><div class="user-dot-inner"></div></div>,
-    iconSize: [18, 18], iconAnchor: [9, 9]
-  });
+  // ── Clock (only when standalone) ──────────────────────────────────────────
+  if (!IS_EMBEDDED) {
+    const clock = document.getElementById('clock');
+    function tick() {
+      const now = new Date();
+      clock.textContent = now.toLocaleTimeString('en-US', { hour12: false }) + ' · ' +
+        now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).toUpperCase();
+    }
+    tick(); setInterval(tick, 1000);
+  }
 
+  // ── localStorage fallback (same as index.html) ────────────────────────────
+  function saveLastLocation(lat, lng, label) {
+    try { localStorage.setItem('oxtrace_last_loc', JSON.stringify({ lat, lon: lng, cityLabel: label })); } catch(e) {}
+  }
+  function loadLastLocation() {
+    try { const r = localStorage.getItem('oxtrace_last_loc'); return r ? JSON.parse(r) : null; } catch(e) { return null; }
+  }
+
+  // ── Map init ──────────────────────────────────────────────────────────────
+  const map = L.map('map', { zoomControl: true, attributionControl: true });
+
+  const layers = {
+    dark: L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+      subdomains: 'abcd', maxZoom: 19
+    }),
+    satellite: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+      attribution: '&copy; Esri &mdash; Source: Esri, USGS, NOAA', maxZoom: 19
+    }),
+    light: L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+      subdomains: 'abcd', maxZoom: 19
+    })
+  };
+  layers.dark.addTo(map);
+  let activeLayer = 'dark', isLightMode = false;
+
+  function setLayer(name) {
+    if (name === activeLayer) return;
+    map.removeLayer(layers[activeLayer]);
+    layers[name].addTo(map);
+    map.eachLayer(l => { if (l !== layers[name] && l.bringToFront) l.bringToFront(); });
+    activeLayer = name;
+    document.getElementById('btn-dark').classList.toggle('active', name === 'dark');
+    document.getElementById('btn-satellite').classList.toggle('active', name === 'satellite');
+  }
+
+  function toggleTheme() {
+    isLightMode = !isLightMode;
+    document.body.classList.toggle('light', isLightMode);
+    const icon = document.getElementById('theme-icon');
+    const label = document.getElementById('theme-label');
+    if (isLightMode) {
+      icon.textContent = '🌙'; label.textContent = 'DARK';
+      if (activeLayer === 'dark') {
+        map.removeLayer(layers.dark); layers.light.addTo(map);
+        map.eachLayer(l => { if (l !== layers.light && l.bringToFront) l.bringToFront(); });
+        activeLayer = 'light';
+        document.getElementById('btn-dark').classList.remove('active');
+      }
+    } else {
+      icon.textContent = '☀️'; label.textContent = 'LIGHT';
+      if (activeLayer === 'light') {
+        map.removeLayer(layers.light); layers.dark.addTo(map);
+        map.eachLayer(l => { if (l !== layers.dark && l.bringToFront) l.bringToFront(); });
+        activeLayer = 'dark';
+        document.getElementById('btn-dark').classList.add('active');
+      }
+    }
+  }
+
+  // ── User Marker HTML ──────────────────────────────────────────────────────
+  const userMarkerHTML =
+    '<div class="user-marker-wrap" id="user-marker-wrap">' +
+      '<div class="user-beam"></div>' +
+      '<div class="user-ring"></div>' +
+      '<div class="user-dot"></div>' +
+      '<div class="user-arrow"></div>' +
+    '</div>';
+
+  const userIcon = L.divIcon({ className: '', html: userMarkerHTML, iconSize: [48,48], iconAnchor: [24,24] });
   const safeIcon = L.divIcon({
     className: '',
-    html: <div style="width:22px;height:22px;border-radius:50%;background:rgba(0,232,122,0.2);border:2px solid #00e87a;box-shadow:0 0 10px #00e87a;display:grid;place-items:center;font-size:10px;">🌿</div>,
-    iconSize: [22, 22], iconAnchor: [11, 11]
+    html: '<div style="width:28px;height:28px;border-radius:50%;background:rgba(0,232,122,0.2);border:2px solid #00e87a;box-shadow:0 0 12px rgba(0,232,122,0.6),0 0 24px rgba(0,232,122,0.3);display:grid;place-items:center;font-size:14px;">&#x1F33F;</div>',
+    iconSize: [28,28], iconAnchor: [14,14]
   });
 
-  function initMap(lat, lng) {
-    document.getElementById('locate-overlay').classList.add('hidden');
-
-    const pollutionLat = lat + 0.003;
-    const safeLat = lat - 0.003;
-
-    // Center map to show both user and safe zone
-    const bounds = L.latLngBounds([[lat, lng], [safeLat, lng]]);
-    map.fitBounds(bounds, { padding: [40, 40] });
-
-    // User
-    L.marker([lat, lng], { icon: userIcon }).addTo(map);
-
-    // Danger Zone
-    L.circle([pollutionLat, lng], {
-      radius: 300, color: '#ff3b5c', weight: 1, fillColor: '#ff3b5c', fillOpacity: 0.1, dashArray: '4 4'
-    }).addTo(map);
-
-    // Safe Zone
-    L.marker([safeLat, lng], { icon: safeIcon }).addTo(map);
-
-    // Navigation Line
-    L.polyline([[lat, lng], [safeLat, lng]], {
-      color: '#ffe944', weight: 2, opacity: 0.6, dashArray: '5 5'
-    }).addTo(map);
+  // ── Compass heading ───────────────────────────────────────────────────────
+  function applyHeading(deg) {
+    const el = document.getElementById('user-marker-wrap');
+    if (el) el.style.transform = 'rotate(' + deg + 'deg)';
   }
 
-  // Real-time GPS check
-  if (navigator.geolocation) {
-    navigator.geolocation.getCurrentPosition(
-      p => initMap(p.coords.latitude, p.coords.longitude),
-      () => initMap(21.1458, 79.0882) // Fallback to Nagpur
+  function startCompass() {
+    if (typeof DeviceOrientationEvent !== 'undefined' &&
+        typeof DeviceOrientationEvent.requestPermission === 'function') {
+      DeviceOrientationEvent.requestPermission().then(s => { if (s === 'granted') listenOrientation(); }).catch(() => {});
+    } else if (window.DeviceOrientationEvent) { listenOrientation(); }
+  }
+
+  function listenOrientation() {
+    window.addEventListener('deviceorientationabsolute', handleOrientation, true);
+    window.addEventListener('deviceorientation', handleOrientation, true);
+  }
+
+  function handleOrientation(e) {
+    let h = null;
+    if (e.webkitCompassHeading != null) h = e.webkitCompassHeading;
+    else if (e.alpha != null) h = 360 - e.alpha;
+    if (h !== null) applyHeading(Math.round(h));
+  }
+
+  // ── Haversine ─────────────────────────────────────────────────────────────
+  function haversine(lat1, lng1, lat2, lng2) {
+    const R = 6371000, toRad = x => x * Math.PI / 180;
+    const dLat = toRad(lat2 - lat1), dLng = toRad(lng2 - lng1);
+    const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng/2)**2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  }
+
+  function formatDistance(meters) {
+    if (meters >= 1000) return { value: (meters / 1000).toFixed(1) + ' km', unit: 'FROM YOU' };
+    return { value: Math.round(meters) + ' m', unit: 'FROM YOU' };
+  }
+
+  // ── AQI Helpers ───────────────────────────────────────────────────────────
+  function aqiCategory(aqi) {
+    if (aqi === null || aqi === undefined) return { label: 'N/A',          color: '#888888', emoji: '❓' };
+    if (aqi <= 50)  return { label: 'GOOD',          color: '#00e87a', emoji: '✅' };
+    if (aqi <= 100) return { label: 'MODERATE',       color: '#ffe944', emoji: '🟡' };
+    if (aqi <= 150) return { label: 'SENSITIVE GRPS', color: '#ff9500', emoji: '⚠️' };
+    if (aqi <= 200) return { label: 'UNHEALTHY',      color: '#ff3b5c', emoji: '🔴' };
+    if (aqi <= 300) return { label: 'VERY UNHEALTHY', color: '#c048ff', emoji: '🟣' };
+    return           { label: 'HAZARDOUS',            color: '#8b0000', emoji: '☠️' };
+  }
+
+  async function fetchAQI(lat, lng) {
+    const url = `https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${lat}&longitude=${lng}&current=us_aqi&timezone=auto`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('AQI fetch failed');
+    const data = await res.json();
+    return data.current?.us_aqi ?? null;
+  }
+
+  function updateAQIPanel(aqi) {
+    const cat = aqiCategory(aqi);
+    const valEl  = document.getElementById('aqi-value');
+    const statEl = document.getElementById('aqi-status');
+    if (valEl)  { valEl.textContent = aqi !== null ? aqi : '—'; valEl.style.color = cat.color; }
+    if (statEl) { statEl.textContent = cat.emoji + ' ' + cat.label; statEl.style.color = cat.color; }
+    document.getElementById('aqi-panel').style.borderColor = cat.color + '55';
+  }
+
+  function updateSafeZoneCard(aqi) {
+    const cat = aqiCategory(aqi);
+    const aqiEl = document.getElementById('szc-aqi');
+    const catEl = document.getElementById('szc-aqi-cat');
+    if (aqiEl) { aqiEl.textContent = aqi !== null ? aqi : '—'; aqiEl.style.color = cat.color; }
+    if (catEl)  catEl.textContent = cat.label;
+  }
+
+  // ── Safe zone finder (probe grid for AQI ≤ 80 then nearest park) ──────────
+  const TARGET_AQI = 80, GRID_KM = 11;
+
+  function offsetCoord(lat, lng, dxKm, dyKm) {
+    return { lat: lat + dyKm / 110.574, lng: lng + dxKm / (111.320 * Math.cos(lat * Math.PI / 180)) };
+  }
+
+  function generateProbes(lat, lng) {
+    const probes = [];
+    const dirs = [[0,1],[1,1],[1,0],[1,-1],[0,-1],[-1,-1],[-1,0],[-1,1]];
+    for (const mult of [1, 1.5, 2, 3]) {
+      for (const [dx, dy] of dirs) {
+        probes.push(offsetCoord(lat, lng, dx * GRID_KM * mult, dy * GRID_KM * mult));
+      }
+    }
+    return probes;
+  }
+
+  async function findParkNear(lat, lng, radiusMeters) {
+    const query = `[out:json][timeout:10];(way["leisure"="park"](around:${radiusMeters},${lat},${lng});node["leisure"="park"](around:${radiusMeters},${lat},${lng});relation["leisure"="park"](around:${radiusMeters},${lat},${lng}););out center 5;`;
+    const res = await fetch('https://overpass-api.de/api/interpreter?data=' + encodeURIComponent(query));
+    if (!res.ok) return null;
+    const data = await res.json();
+    let best = null, minD = Infinity;
+    for (const el of (data.elements || [])) {
+      const pLat = el.lat ?? el.center?.lat;
+      const pLng = el.lon  ?? el.center?.lon;
+      if (!pLat || !pLng) continue;
+      const d = haversine(lat, lng, pLat, pLng);
+      if (d < minD) { minD = d; best = { lat: pLat, lng: pLng, name: el.tags?.name || 'Public Park' }; }
+    }
+    return best;
+  }
+
+  async function findPlaceWithTargetAQI(userLat, userLng) {
+    const probes = generateProbes(userLat, userLng);
+    let bestCandidate = null;
+    const rings = [probes.slice(0,8), probes.slice(8,16), probes.slice(16,24), probes.slice(24)];
+    const ringLabels = ['11km', '16km', '22km', '33km'];
+
+    for (let r = 0; r < rings.length; r++) {
+      setStatus(`PROBING ${ringLabels[r]} RADIUS FOR AQI ≤ ${TARGET_AQI}...`);
+      const results = await Promise.all(rings[r].map(async probe => {
+        try {
+          const aqi = await fetchAQI(probe.lat, probe.lng);
+          return { ...probe, aqi, distFromUser: haversine(userLat, userLng, probe.lat, probe.lng) };
+        } catch { return null; }
+      }));
+      const valid = results.filter(p => p && p.aqi !== null);
+      for (const p of valid) { if (!bestCandidate || p.aqi < bestCandidate.aqi) bestCandidate = p; }
+      const qualifying = valid.filter(p => p.aqi <= TARGET_AQI).sort((a,b) => a.distFromUser - b.distFromUser);
+      if (qualifying.length > 0) {
+        const winner = qualifying[0];
+        setStatus(`LOCATING NEAREST PARK AT ${ringLabels[r]}...`);
+        const park = await findParkNear(winner.lat, winner.lng, 8000).catch(() => null);
+        if (park) return { lat: park.lat, lng: park.lng, name: park.name, aqi: winner.aqi, dist: haversine(userLat, userLng, park.lat, park.lng) };
+        return { lat: winner.lat, lng: winner.lng, name: 'Cleaner Air Zone', aqi: winner.aqi, dist: winner.distFromUser };
+      }
+    }
+    if (bestCandidate) {
+      setStatus('BEST AVAILABLE AIR FOUND...');
+      const park = await findParkNear(bestCandidate.lat, bestCandidate.lng, 8000).catch(() => null);
+      return {
+        lat: park?.lat ?? bestCandidate.lat, lng: park?.lng ?? bestCandidate.lng,
+        name: park?.name ?? 'Best Available Zone', aqi: bestCandidate.aqi,
+        dist: haversine(userLat, userLng, park?.lat ?? bestCandidate.lat, park?.lng ?? bestCandidate.lng)
+      };
+    }
+    return null;
+  }
+
+  // ── Draw overlays ─────────────────────────────────────────────────────────
+  function drawOverlays(lat, lng, userAqi, park) {
+    const userCat = aqiCategory(userAqi);
+    const userMarker = L.marker([lat, lng], { icon: userIcon }).addTo(map);
+    userMarker.bindPopup(`<span style="color:#00c8ff">📍 You are here</span><br><span style="font-size:12px;color:${userCat.color}">AQI ${userAqi ?? '—'} · ${userCat.label}</span>`);
+    setTimeout(startCompass, 300);
+
+    const zoneRadius = (userAqi ?? 0) > 150 ? 700 : (userAqi ?? 0) > 100 ? 500 : (userAqi ?? 0) > 50 ? 350 : 200;
+    L.circle([lat, lng], {
+      radius: zoneRadius, color: userCat.color, weight: 1.5, opacity: 0.85,
+      fillColor: userCat.color, fillOpacity: 0.1, dashArray: '6 4'
+    }).addTo(map).bindPopup(`<span style="color:${userCat.color}">${userCat.emoji} ${userCat.label} Zone</span><br><span style="font-size:12px;opacity:0.7">AQI ${userAqi ?? '—'} · Live</span>`);
+
+    if (!park) {
+      // ── Notify parent even without a park ──────────────────────────────────
+      notifyParent(userAqi, null);
+      return;
+    }
+
+    const safeCat = aqiCategory(park.aqi);
+    const realDist = haversine(lat, lng, park.lat, park.lng);
+
+    L.marker([park.lat, park.lng], { icon: safeIcon }).addTo(map).bindPopup(
+      `<span style="color:${safeCat.color}">${safeCat.emoji} ${park.name}</span><br>` +
+      `<span style="font-size:12px;opacity:0.7">AQI ${park.aqi ?? '—'} · ${safeCat.label}</span><br>` +
+      `<span style="font-size:11px;color:#00e87a">✅ AQI ≤ ${TARGET_AQI} target</span><br>` +
+      `<span style="font-size:11px;color:#4a6680">📏 ${formatDistance(realDist).value} away</span>`
     );
-  } else {
-    initMap(21.1458, 79.0882);
+
+    const fmt = formatDistance(realDist);
+    const parkNameEl = document.getElementById('szc-park-name');
+    const distEl     = document.getElementById('szc-dist');
+    if (parkNameEl) parkNameEl.textContent = park.name;
+    if (distEl)     distEl.textContent     = fmt.value;
+    updateSafeZoneCard(park.aqi);
+    setTimeout(() => document.getElementById('safe-zone-card').classList.add('visible'), 500);
+
+    L.polyline([[lat, lng], [park.lat, park.lng]], { color: '#ffe944', weight: 2.5, opacity: 0.85, dashArray: '10 8', lineCap: 'round' }).addTo(map);
+    L.circleMarker([park.lat, park.lng], { radius: 4, color: '#ffe944', fillColor: '#ffe944', fillOpacity: 0.5, weight: 2 }).addTo(map);
+
+    map.fitBounds([[lat, lng], [park.lat, park.lng]], { padding: [80, 80] });
+
+    // ── Notify parent (index.html) with live data ──────────────────────────
+    notifyParent(userAqi, { name: park.name, aqi: park.aqi, dist: realDist });
   }
+
+  // ── Status text helper ────────────────────────────────────────────────────
+  function setStatus(msg) {
+    const el = document.querySelector('.locate-text');
+    if (el) el.textContent = msg;
+  }
+
+  // ── Main init ─────────────────────────────────────────────────────────────
+  async function initMap(lat, lng, accuracyMeters) {
+    document.getElementById('locate-overlay').classList.add('hidden');
+    map.setView([lat, lng], 15);
+    updateAQIPanel(null);
+
+    if (accuracyMeters && !IS_EMBEDDED) {
+      document.getElementById('status-bar').innerHTML =
+        `<span class="status-dot"></span>LIVE · GPS ±${Math.round(accuracyMeters)}m`;
+    }
+
+    try {
+      setStatus('FETCHING YOUR AQI...');
+      const userAqi = await fetchAQI(lat, lng);
+      updateAQIPanel(userAqi);
+
+      setStatus('FINDING NEAREST PLACE WITH AQI ≤ 80...');
+      const bestPark = await findPlaceWithTargetAQI(lat, lng).catch(() => null);
+
+      drawOverlays(lat, lng, userAqi, bestPark);
+    } catch (err) {
+      console.warn('Init failed:', err);
+      updateAQIPanel(null);
+      drawOverlays(lat, lng, null, null);
+    }
+  }
+
+  // ── GPS with localStorage fallback ───────────────────────────────────────
+  let gpsInitDone = false;
+
+  function startGPS() {
+    if (!('geolocation' in navigator)) {
+      useFallback();
+      return;
+    }
+    setStatus('ACQUIRING GPS SIGNAL...');
+    const watchId = navigator.geolocation.watchPosition(
+      pos => {
+        const { latitude, longitude, accuracy } = pos.coords;
+        // Save every successful fix
+        saveLastLocation(latitude, longitude, `${latitude.toFixed(3)}, ${longitude.toFixed(3)}`);
+        if (!gpsInitDone) {
+          gpsInitDone = true;
+          initMap(latitude, longitude, accuracy);
+        } else if (accuracy < 50) {
+          navigator.geolocation.clearWatch(watchId);
+        }
+      },
+      err => {
+        console.warn('GPS error:', err.message);
+        if (!gpsInitDone) {
+          gpsInitDone = true;
+          useFallback();
+        }
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+    );
+  }
+
+  function useFallback() {
+    const last = loadLastLocation();
+    if (last) {
+      setStatus('USING LAST KNOWN LOCATION...');
+      initMap(last.lat, last.lon ?? last.lng, null);
+    } else {
+      // No GPS, no saved location — show a message, don't load fake coords
+      document.getElementById('locate-overlay').classList.add('hidden');
+      map.setView([20, 0], 2); // world view
+      layers.dark.addTo(map);
+      updateAQIPanel(null);
+      document.getElementById('aqi-value').textContent  = '—';
+      document.getElementById('aqi-status').textContent = '📍 ALLOW LOCATION';
+    }
+  }
+
+  startGPS();
 </script>
 </body>
 </html>
