@@ -1,0 +1,874 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OxyTrace — Lung Health</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="logic.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=IBM+Plex+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --neon-blue:   #00d4ff;
+      --neon-green:  #00ff88;
+      --neon-yellow: #ffd700;
+      --neon-orange: #ff9500;
+      --neon-red:    #ff4444;
+      --bg-dark:     #070b0f;
+      --card-bg:     #0d1520;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+
+    body {
+      font-family: 'IBM Plex Mono', monospace;
+      background-color: var(--bg-dark);
+      background-image:
+        radial-gradient(ellipse 80% 40% at 50% -5%, rgba(0,212,255,0.07) 0%, transparent 65%),
+        linear-gradient(rgba(0,212,255,0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0,212,255,0.03) 1px, transparent 1px);
+      background-size: 100% 100%, 32px 32px, 32px 32px;
+      min-height: 100vh;
+      color: #e0f4ff;
+      overflow-x: hidden;
+    }
+
+    /* Scanline */
+    body::before {
+      content: '';
+      position: fixed; inset: 0;
+      background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.07) 2px, rgba(0,0,0,0.07) 4px);
+      pointer-events: none; z-index: 9999;
+    }
+
+    /* ── Shared utilities ── */
+    .font-orbitron { font-family: 'Orbitron', sans-serif; }
+    .glow-blue  { text-shadow: 0 0 10px var(--neon-blue),  0 0 30px rgba(0,212,255,0.4); }
+    .glow-green { text-shadow: 0 0 10px var(--neon-green), 0 0 30px rgba(0,255,136,0.4); }
+
+    .card {
+      background: var(--card-bg);
+      border: 1px solid rgba(0,212,255,0.12);
+      border-radius: 18px;
+      transition: border-color 0.3s;
+    }
+    .card:hover { border-color: rgba(0,212,255,0.3); }
+
+    /* ── Header ── */
+    header {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 50;
+      background: rgba(7,11,15,0.88);
+      backdrop-filter: blur(16px);
+      border-bottom: 1px solid rgba(0,212,255,0.12);
+    }
+
+    /* ── Bottom nav ── */
+    .bottom-nav {
+      background: rgba(7,11,15,0.95);
+      backdrop-filter: blur(20px);
+      border-top: 1px solid rgba(0,212,255,0.15);
+    }
+    .nav-btn.active { filter: drop-shadow(0 0 6px rgba(0,212,255,0.6)); }
+    .nav-btn.active svg { color: var(--neon-blue); }
+    .nav-btn.active span { color: var(--neon-blue); }
+
+    /* ── Page-entry animation ── */
+    @keyframes fade-up {
+      from { opacity:0; transform: translateY(18px); }
+      to   { opacity:1; transform: translateY(0); }
+    }
+    .fade-up { animation: fade-up 0.55s cubic-bezier(0.22,1,0.36,1) both; }
+    .delay-1 { animation-delay: 0.08s; }
+    .delay-2 { animation-delay: 0.16s; }
+    .delay-3 { animation-delay: 0.24s; }
+    .delay-4 { animation-delay: 0.32s; }
+    .delay-5 { animation-delay: 0.40s; }
+    .delay-6 { animation-delay: 0.48s; }
+
+    /* ── Lung Health Score ring ── */
+    .score-ring-circle {
+      stroke-dasharray: 408;
+      stroke-dashoffset: 408;
+      stroke-linecap: round;
+      transition: stroke-dashoffset 1.6s cubic-bezier(0.4,0,0.2,1),
+                  stroke 0.4s ease;
+      filter: drop-shadow(0 0 8px var(--neon-green));
+    }
+
+    /* ── Exposure summary bar ── */
+    .exp-bar-fill {
+      height: 100%;
+      border-radius: 999px;
+      transition: width 1.2s cubic-bezier(0.4,0,0.2,1);
+    }
+
+    /* ── Timeline chart ── */
+    #timeline-canvas {
+      width: 100%;
+      height: 140px;
+      display: block;
+    }
+
+    /* ── Worst exposure cards ── */
+    .spike-card {
+      background: var(--card-bg);
+      border-radius: 12px;
+      border: 1px solid rgba(255,68,68,0.15);
+      transition: border-color 0.3s, transform 0.3s;
+    }
+    .spike-card:hover {
+      border-color: rgba(255,68,68,0.4);
+      transform: translateY(-2px);
+    }
+
+    /* ── Pulse dot ── */
+    @keyframes pulse-dot {
+      0%,100% { opacity:1; transform:scale(1); }
+      50%      { opacity:0.3; transform:scale(0.75); }
+    }
+    .pulse-dot { animation: pulse-dot 1.5s ease-in-out infinite; }
+
+    /* ── Flicker live label ── */
+    @keyframes flicker {
+      0%,97%,100% { opacity:1; }
+      98% { opacity:0.5; }
+    }
+    .live-label { animation: flicker 4s ease-in-out infinite; }
+
+    /* ── Score shimmer on load ── */
+    @keyframes score-pop {
+      from { opacity:0; transform:scale(0.7); }
+      to   { opacity:1; transform:scale(1); }
+    }
+    .score-pop { animation: score-pop 0.7s cubic-bezier(0.34,1.56,0.64,1) 0.5s both; }
+
+    /* ── Hour heatmap cells ── */
+    .hour-cell {
+      flex: 1;
+      height: 28px;
+      border-radius: 4px;
+      position: relative;
+      cursor: default;
+      transition: transform 0.15s;
+    }
+    .hour-cell:hover { transform: scaleY(1.3); }
+    .hour-cell::after {
+      content: attr(data-label);
+      position: absolute;
+      bottom: -16px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 8px;
+      opacity: 0.4;
+      white-space: nowrap;
+      font-family: 'IBM Plex Mono', monospace;
+    }
+
+    /* ── Tooltip ── */
+    #chart-tooltip {
+      position: absolute;
+      background: rgba(10,16,26,0.95);
+      border: 1px solid rgba(0,212,255,0.3);
+      border-radius: 8px;
+      padding: 6px 10px;
+      font-size: 11px;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.15s;
+      z-index: 10;
+      white-space: nowrap;
+    }
+  </style>
+</head>
+<body class="pb-20">
+
+<!-- ════════════════════════════════════════════ HEADER -->
+<header class="px-5 py-3 flex items-center justify-between">
+  <div class="flex items-center gap-2">
+    <a href="index.html" class="flex items-center gap-2" style="text-decoration:none">
+      <svg viewBox="0 0 32 32" fill="none" class="w-8 h-8">
+        <circle cx="16" cy="16" r="14" stroke="#00d4ff" stroke-width="1.5" opacity="0.4"/>
+        <path d="M10 20 C10 20 10 10 16 10 C22 10 22 20 22 20" stroke="#00d4ff" stroke-width="2" stroke-linecap="round" fill="none"/>
+        <path d="M13 20 C13 20 13 14 16 14 C19 14 19 20 19 20" stroke="#00ff88" stroke-width="2" stroke-linecap="round" fill="none"/>
+        <circle cx="16" cy="10" r="2" fill="#00d4ff" opacity="0.8"/>
+      </svg>
+      <span class="font-orbitron font-black text-lg tracking-widest glow-blue" style="color:var(--neon-blue)">OXY<span style="color:var(--neon-green)" class="glow-green">TRACE</span></span>
+    </a>
+  </div>
+  <div class="flex items-center gap-3">
+    <div class="flex items-center gap-1.5 live-label">
+      <span class="w-2 h-2 rounded-full pulse-dot" style="background:var(--neon-green)"></span>
+      <span style="color:var(--neon-green); font-size:10px; letter-spacing:0.1em;">LIVE</span>
+    </div>
+    <div class="font-orbitron text-xs opacity-40" id="page-clock"></div>
+  </div>
+</header>
+
+<!-- ════════════════════════════════════════════ MAIN -->
+<main class="pt-16 pb-4 px-4 max-w-md mx-auto space-y-5">
+
+  <!-- Page title -->
+  <div class="mt-4 fade-up">
+    <p class="font-orbitron text-xs tracking-widest opacity-40 uppercase">Personal Report</p>
+    <h1 class="font-orbitron text-xl font-black mt-1" style="color:var(--neon-blue)">Lung Health</h1>
+  </div>
+
+  <!-- ══════════════════════════════════════════
+       SECTION 1 — LUNG HEALTH SCORE
+  ══════════════════════════════════════════ -->
+  <section class="card p-5 fade-up delay-1">
+    <p class="font-orbitron text-xs tracking-widest opacity-40 uppercase mb-4">Lung Health Score</p>
+
+    <div class="flex items-center gap-5">
+      <!-- Score ring -->
+      <div class="relative flex-shrink-0" style="width:110px; height:110px;">
+        <svg viewBox="0 0 110 110" class="w-full h-full" style="transform:rotate(-90deg)">
+          <!-- Track -->
+          <circle cx="55" cy="55" r="46" stroke="rgba(0,212,255,0.08)" stroke-width="10" fill="none"/>
+          <!-- Segments hint -->
+          <circle cx="55" cy="55" r="46" stroke="rgba(0,212,255,0.04)" stroke-width="10" fill="none"
+            stroke-dasharray="10 5" stroke-linecap="round"/>
+          <!-- Fill -->
+          <circle id="score-ring" class="score-ring-circle" cx="55" cy="55" r="46"
+            stroke="var(--neon-green)" stroke-width="10" fill="none"/>
+        </svg>
+        <!-- Inner text -->
+        <div class="absolute inset-0 flex flex-col items-center justify-center">
+          <span id="score-number" class="font-orbitron font-black score-pop" style="font-size:28px; line-height:1; color:var(--neon-green)">—</span>
+          <span class="font-orbitron" style="font-size:9px; opacity:0.4; letter-spacing:0.1em;">/100</span>
+        </div>
+      </div>
+
+      <!-- Score breakdown -->
+      <div class="flex-1 space-y-3">
+        <div>
+          <div class="flex justify-between items-center mb-1">
+            <span style="font-size:10px; opacity:0.5;">Today's AQI</span>
+            <span id="score-aqi-val" class="font-orbitron" style="font-size:11px; color:var(--neon-blue)">—</span>
+          </div>
+          <div class="h-1.5 rounded-full" style="background:rgba(255,255,255,0.05)">
+            <div id="score-aqi-bar" class="exp-bar-fill" style="width:0%; background:var(--neon-blue)"></div>
+          </div>
+        </div>
+        <div>
+          <div class="flex justify-between items-center mb-1">
+            <span style="font-size:10px; opacity:0.5;">Risk Level</span>
+            <span id="score-risk-label" class="font-orbitron" style="font-size:11px; color:var(--neon-green)">—</span>
+          </div>
+          <div class="h-1.5 rounded-full" style="background:rgba(255,255,255,0.05)">
+            <div id="score-risk-bar" class="exp-bar-fill" style="width:0%; background:var(--neon-green)"></div>
+          </div>
+        </div>
+        <div>
+          <div class="flex justify-between items-center mb-1">
+            <span style="font-size:10px; opacity:0.5;">Safe Hours</span>
+            <span id="score-safe-hours" class="font-orbitron" style="font-size:11px; color:var(--neon-yellow)">—</span>
+          </div>
+          <div class="h-1.5 rounded-full" style="background:rgba(255,255,255,0.05)">
+            <div id="score-safe-bar" class="exp-bar-fill" style="width:0%; background:var(--neon-yellow)"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Recommendation chip -->
+    <div id="score-recommendation"
+         class="mt-4 rounded-xl px-3 py-2.5 text-xs leading-relaxed"
+         style="background:rgba(0,255,136,0.06); border:1px solid rgba(0,255,136,0.15); color:var(--neon-green)">
+      Loading recommendation...
+    </div>
+  </section>
+
+  <!-- ══════════════════════════════════════════
+       SECTION 2 — DAILY EXPOSURE SUMMARY
+  ══════════════════════════════════════════ -->
+  <section class="fade-up delay-2">
+    <p class="font-orbitron text-xs tracking-widest opacity-40 uppercase mb-3">Daily Exposure Summary</p>
+
+    <div class="grid grid-cols-3 gap-3">
+      <!-- Avg AQI -->
+      <div class="card rounded-2xl p-3 text-center">
+        <div class="w-7 h-7 rounded-full mx-auto mb-2 flex items-center justify-center" style="background:rgba(0,212,255,0.1)">
+          <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="var(--neon-blue)" stroke-width="2">
+            <path stroke-linecap="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+          </svg>
+        </div>
+        <p id="exp-avg-aqi" class="font-orbitron font-bold text-base" style="color:var(--neon-blue)">—</p>
+        <p class="text-xs opacity-40 mt-0.5">Avg AQI</p>
+      </div>
+      <!-- Peak AQI -->
+      <div class="card rounded-2xl p-3 text-center" style="border-color:rgba(255,68,68,0.15)">
+        <div class="w-7 h-7 rounded-full mx-auto mb-2 flex items-center justify-center" style="background:rgba(255,68,68,0.1)">
+          <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="var(--neon-red)" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/>
+          </svg>
+        </div>
+        <p id="exp-peak-aqi" class="font-orbitron font-bold text-base" style="color:var(--neon-red)">—</p>
+        <p class="text-xs opacity-40 mt-0.5">Peak AQI</p>
+      </div>
+      <!-- Exposure hours -->
+      <div class="card rounded-2xl p-3 text-center" style="border-color:rgba(255,149,0,0.15)">
+        <div class="w-7 h-7 rounded-full mx-auto mb-2 flex items-center justify-center" style="background:rgba(255,149,0,0.1)">
+          <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="var(--neon-orange)" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/>
+            <path stroke-linecap="round" d="M12 6v6l4 2"/>
+          </svg>
+        </div>
+        <p id="exp-bad-hours" class="font-orbitron font-bold text-base" style="color:var(--neon-orange)">—</p>
+        <p class="text-xs opacity-40 mt-0.5">Bad Hours</p>
+      </div>
+    </div>
+
+    <!-- Hourly heatmap bar -->
+    <div class="card mt-3 p-4">
+      <div class="flex items-center justify-between mb-3">
+        <span class="font-orbitron text-xs opacity-40 uppercase tracking-widest">24h Exposure</span>
+        <span class="text-xs opacity-30">hover for details</span>
+      </div>
+      <div id="heatmap-row" class="flex gap-0.5" style="padding-bottom:20px; position:relative;">
+        <!-- Cells injected by JS -->
+      </div>
+      <!-- Heatmap legend -->
+      <div class="flex items-center gap-2 mt-1">
+        <span class="text-xs opacity-30">Low</span>
+        <div class="flex-1 h-1 rounded-full" style="background:linear-gradient(90deg,#00ff88,#ffd700,#ff9500,#ff4444)"></div>
+        <span class="text-xs opacity-30">High</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════════════════════
+       SECTION 3 — POLLUTION EXPOSURE TIMELINE
+  ══════════════════════════════════════════ -->
+  <section class="fade-up delay-3">
+    <p class="font-orbitron text-xs tracking-widest opacity-40 uppercase mb-3">Exposure Timeline · Today</p>
+
+    <div class="card p-4" style="position:relative;">
+      <!-- Tooltip -->
+      <div id="chart-tooltip"></div>
+
+      <!-- Y-axis labels -->
+      <div class="flex">
+        <div class="flex flex-col justify-between text-right pr-2" style="width:28px; height:140px;">
+          <span style="font-size:9px; opacity:0.3;">300</span>
+          <span style="font-size:9px; opacity:0.3;">150</span>
+          <span style="font-size:9px; opacity:0.3;">50</span>
+          <span style="font-size:9px; opacity:0.3;">0</span>
+        </div>
+        <!-- Canvas -->
+        <div class="flex-1 relative">
+          <canvas id="timeline-canvas"></canvas>
+        </div>
+      </div>
+
+      <!-- X-axis labels -->
+      <div class="flex justify-between mt-1 pl-7" style="font-size:9px; opacity:0.3;">
+        <span>12am</span><span>6am</span><span>12pm</span><span>6pm</span><span>Now</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════════════════════
+       SECTION 4 — WORST EXPOSURE MOMENTS
+  ══════════════════════════════════════════ -->
+  <section class="fade-up delay-4">
+    <div class="flex items-center justify-between mb-3">
+      <p class="font-orbitron text-xs tracking-widest opacity-40 uppercase">⚠ Worst Moments Today</p>
+      <span id="spike-count" class="font-orbitron text-xs px-2 py-0.5 rounded-full"
+            style="background:rgba(255,68,68,0.1); color:var(--neon-red); border:1px solid rgba(255,68,68,0.2);">0 spikes</span>
+    </div>
+    <div id="spike-feed" class="space-y-2">
+      <div class="spike-card px-4 py-3 flex items-center gap-3 opacity-40">
+        <div class="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0" style="background:rgba(255,68,68,0.08)">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="var(--neon-red)" stroke-width="1.5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+          </svg>
+        </div>
+        <div>
+          <p class="text-sm" style="color:var(--neon-red)">Awaiting data...</p>
+          <p class="text-xs opacity-40">Exposure spikes will appear here</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════════════════════
+       SECTION 5 — PERSONALIZED HEALTH ADVICE
+  ══════════════════════════════════════════ -->
+  <section class="card p-4 fade-up delay-5" style="border-color:rgba(0,255,136,0.12)">
+    <p class="font-orbitron text-xs tracking-widest opacity-40 uppercase mb-3">Health Advisory</p>
+    <div id="advice-list" class="space-y-2">
+      <div class="flex items-start gap-2 text-xs opacity-40">
+        <span class="mt-0.5 flex-shrink-0">⏳</span>
+        <span>Fetching your personalised advice...</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════════════════════
+       SECTION 6 — DATA SOURCE NOTE
+  ══════════════════════════════════════════ -->
+  <div class="fade-up delay-6 text-center pb-2">
+    <p class="text-xs opacity-20">Data: Open-Meteo · Simulated hourly from live AQI</p>
+    <p class="text-xs opacity-20 mt-0.5">Last fetched: <span id="fetch-time">—</span></p>
+  </div>
+
+</main>
+
+<!-- ════════════════════════════════════════════ BOTTOM NAV -->
+<nav class="bottom-nav fixed bottom-0 left-0 right-0 flex items-center justify-around py-2 px-2 z-50">
+  <!-- Home -->
+  <a href="index.html" class="nav-btn flex flex-col items-center gap-1 px-3 py-2 rounded-xl" style="text-decoration:none">
+    <svg class="w-5 h-5 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M3 9.75L12 3l9 6.75V21a1 1 0 01-1 1H4a1 1 0 01-1-1V9.75z"/>
+      <path stroke-linecap="round" stroke-linejoin="round" d="M9 22V12h6v10"/>
+    </svg>
+    <span class="text-xs opacity-40 font-orbitron" style="font-size:9px; letter-spacing:0.05em;">Home</span>
+  </a>
+  <!-- Map -->
+  <a href="map.html" class="nav-btn flex flex-col items-center gap-1 px-3 py-2 rounded-xl" style="text-decoration:none">
+    <svg class="w-5 h-5 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M9 3L3 6v15l6-3 6 3 6-3V3l-6 3-6-3z"/>
+      <path stroke-linecap="round" stroke-linejoin="round" d="M9 3v15m6-12v15"/>
+    </svg>
+    <span class="text-xs opacity-40 font-orbitron" style="font-size:9px; letter-spacing:0.05em;">Map</span>
+  </a>
+  <!-- Health — active -->
+  <a href="health.html" class="nav-btn active flex flex-col items-center gap-1 px-3 py-2 rounded-xl" style="text-decoration:none; background:rgba(0,212,255,0.08)">
+    <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="var(--neon-blue)" stroke-width="1.8">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M4.318 6.318a4.5 4.5 0 016.364 0L12 7.636l1.318-1.318a4.5 4.5 0 116.364 6.364L12 20.364l-7.682-7.682a4.5 4.5 0 010-6.364z"/>
+    </svg>
+    <span class="text-xs font-orbitron" style="color:var(--neon-blue); font-size:9px; letter-spacing:0.05em;">Health</span>
+  </a>
+  <!-- Alerts -->
+  <a href="index.html#alerts" class="nav-btn flex flex-col items-center gap-1 px-3 py-2 rounded-xl" style="text-decoration:none">
+    <svg class="w-5 h-5 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>
+    </svg>
+    <span class="text-xs opacity-40 font-orbitron" style="font-size:9px; letter-spacing:0.05em;">Alerts</span>
+  </a>
+</nav>
+
+<script>
+// ─── CLOCK ───────────────────────────────────────────────────────────────────
+const clockEl = document.getElementById('page-clock');
+function tickClock() {
+  clockEl.textContent = new Date().toLocaleTimeString([], { hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false });
+}
+tickClock(); setInterval(tickClock, 1000);
+
+// ─── AQI COLOR MAP ───────────────────────────────────────────────────────────
+function aqiColor(v) {
+  if (v === null || v === undefined) return '#4a6680';
+  if (v <= 50)  return '#00ff88';
+  if (v <= 100) return '#ffd700';
+  if (v <= 150) return '#ff9500';
+  if (v <= 200) return '#ff4444';
+  if (v <= 300) return '#cc44ff';
+  return '#ff0000';
+}
+
+function aqiLabel(v) {
+  if (v === null) return 'N/A';
+  if (v <= 50)  return 'Good';
+  if (v <= 100) return 'Moderate';
+  if (v <= 150) return 'Sensitive Grps';
+  if (v <= 200) return 'Unhealthy';
+  if (v <= 300) return 'Very Unhealthy';
+  return 'Hazardous';
+}
+
+// ─── HOURLY DATA GENERATOR ───────────────────────────────────────────────────
+// Open-Meteo doesn't offer free hourly history for past hours,
+// so we simulate a realistic 24-hour pattern from the live AQI:
+// AQI is naturally lower at night, peaks in morning rush + evening.
+function generateHourlyData(liveAqi) {
+  const now = new Date();
+  const currentHour = now.getHours();
+  const data = [];
+
+  // Traffic-pattern multipliers for 24 hours (0-23)
+  const PATTERN = [
+    0.55, 0.50, 0.48, 0.46, 0.50, 0.60,  // 0-5am (late night → pre-dawn)
+    0.80, 1.05, 1.15, 1.05, 0.90, 0.85,  // 6-11am (morning rush)
+    0.88, 0.85, 0.82, 0.85, 0.95, 1.10,  // 12-5pm (midday → afternoon)
+    1.20, 1.10, 0.95, 0.85, 0.75, 0.65   // 6-11pm (evening rush → night)
+  ];
+
+  for (let h = 0; h <= currentHour; h++) {
+    // Apply pattern + small random noise
+    const noise = 0.88 + Math.random() * 0.24;
+    const val = Math.round(liveAqi * PATTERN[h] * noise);
+    data.push({ hour: h, aqi: Math.max(0, Math.min(500, val)) });
+  }
+  return data;
+}
+
+// ─── LUNG HEALTH SCORE ───────────────────────────────────────────────────────
+// Score 0-100 where 100 = perfect air all day
+// Penalises by: current AQI level, number of hours above 100, peak AQI
+function computeLungScore(hourlyData, currentAqi) {
+  if (!hourlyData.length) return 50;
+  const avg  = hourlyData.reduce((s,d) => s + d.aqi, 0) / hourlyData.length;
+  const peak = Math.max(...hourlyData.map(d => d.aqi));
+  const badH = hourlyData.filter(d => d.aqi > 100).length;
+
+  // Base: invert average AQI on 0-300 scale
+  let score = 100 - (avg / 300 * 60);
+  // Peak penalty
+  score -= (peak / 500) * 20;
+  // Bad hours penalty (max -20 for 12+ bad hours)
+  score -= Math.min(badH / 12, 1) * 20;
+
+  return Math.round(Math.max(0, Math.min(100, score)));
+}
+
+// ─── DRAW TIMELINE CANVAS ────────────────────────────────────────────────────
+function drawTimeline(hourlyData) {
+  const canvas = document.getElementById('timeline-canvas');
+  const container = canvas.parentElement;
+  canvas.width  = container.offsetWidth * window.devicePixelRatio;
+  canvas.height = 140 * window.devicePixelRatio;
+  canvas.style.height = '140px';
+  const ctx = canvas.getContext('2d');
+  ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+
+  const W = container.offsetWidth;
+  const H = 140;
+  const PAD = { top: 8, bottom: 8 };
+  const MAX_AQI = 300;
+
+  if (!hourlyData.length) return;
+
+  const stepX = W / Math.max(hourlyData.length - 1, 1);
+
+  function toY(aqi) {
+    return PAD.top + (1 - Math.min(aqi, MAX_AQI) / MAX_AQI) * (H - PAD.top - PAD.bottom);
+  }
+
+  // ── Threshold lines ──
+  [[50,'rgba(0,255,136,0.15)'],[100,'rgba(255,215,0,0.15)'],[150,'rgba(255,68,68,0.15)']].forEach(([v, c]) => {
+    const y = toY(v);
+    ctx.beginPath();
+    ctx.setLineDash([4, 6]);
+    ctx.strokeStyle = c;
+    ctx.lineWidth = 1;
+    ctx.moveTo(0, y); ctx.lineTo(W, y);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  });
+
+  // ── Gradient fill under curve ──
+  const grad = ctx.createLinearGradient(0, 0, 0, H);
+  grad.addColorStop(0,   'rgba(255,68,68,0.35)');
+  grad.addColorStop(0.4, 'rgba(255,149,0,0.20)');
+  grad.addColorStop(0.7, 'rgba(255,215,0,0.12)');
+  grad.addColorStop(1,   'rgba(0,255,136,0.04)');
+
+  ctx.beginPath();
+  hourlyData.forEach((d, i) => {
+    const x = i * stepX, y = toY(d.aqi);
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  });
+  ctx.lineTo((hourlyData.length - 1) * stepX, H);
+  ctx.lineTo(0, H);
+  ctx.closePath();
+  ctx.fillStyle = grad;
+  ctx.fill();
+
+  // ── Line ──
+  ctx.beginPath();
+  ctx.lineWidth = 2.5;
+  ctx.lineJoin  = 'round';
+  ctx.lineCap   = 'round';
+
+  hourlyData.forEach((d, i) => {
+    const x = i * stepX, y = toY(d.aqi);
+    if (i === 0) { ctx.moveTo(x, y); return; }
+    // Smooth curve
+    const prev = hourlyData[i - 1];
+    const px   = (i - 1) * stepX, py = toY(prev.aqi);
+    const cpx  = (px + x) / 2;
+    ctx.bezierCurveTo(cpx, py, cpx, y, x, y);
+  });
+
+  // Colour stroke by current level
+  const lastAqi = hourlyData[hourlyData.length - 1].aqi;
+  ctx.strokeStyle = aqiColor(lastAqi);
+  ctx.shadowColor = aqiColor(lastAqi);
+  ctx.shadowBlur  = 6;
+  ctx.stroke();
+  ctx.shadowBlur  = 0;
+
+  // ── Data points ──
+  hourlyData.forEach((d, i) => {
+    const x = i * stepX, y = toY(d.aqi);
+    ctx.beginPath();
+    ctx.arc(x, y, i === hourlyData.length - 1 ? 5 : 3, 0, Math.PI * 2);
+    ctx.fillStyle = aqiColor(d.aqi);
+    if (i === hourlyData.length - 1) {
+      ctx.shadowColor = aqiColor(d.aqi);
+      ctx.shadowBlur  = 10;
+    }
+    ctx.fill();
+    ctx.shadowBlur = 0;
+  });
+
+  // ── Canvas tooltip on hover ──
+  const tooltip = document.getElementById('chart-tooltip');
+  canvas.onmousemove = (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const mx   = e.clientX - rect.left;
+    const idx  = Math.round(mx / (W / Math.max(hourlyData.length - 1, 1)));
+    if (idx < 0 || idx >= hourlyData.length) return;
+    const d   = hourlyData[idx];
+    const tx  = Math.min(mx + 10, W - 120);
+    const ty  = toY(d.aqi) - 36;
+    tooltip.style.left    = tx + 'px';
+    tooltip.style.top     = ty + 'px';
+    tooltip.style.opacity = '1';
+    tooltip.style.color   = aqiColor(d.aqi);
+    tooltip.innerHTML     = `<span style="opacity:0.5">${d.hour}:00</span>  AQI <b>${d.aqi}</b>  <span style="opacity:0.6">${aqiLabel(d.aqi)}</span>`;
+  };
+  canvas.onmouseleave = () => { tooltip.style.opacity = '0'; };
+}
+
+// ─── DRAW HEATMAP ─────────────────────────────────────────────────────────────
+function drawHeatmap(hourlyData) {
+  const row = document.getElementById('heatmap-row');
+  row.innerHTML = '';
+
+  for (let h = 0; h < 24; h++) {
+    const entry = hourlyData.find(d => d.hour === h);
+    const cell  = document.createElement('div');
+    cell.className = 'hour-cell';
+
+    if (entry) {
+      const color = aqiColor(entry.aqi);
+      cell.style.background = color + '88';
+      cell.style.boxShadow  = `0 0 4px ${color}44`;
+      cell.title = `${h}:00 — AQI ${entry.aqi} (${aqiLabel(entry.aqi)})`;
+    } else {
+      cell.style.background = 'rgba(255,255,255,0.04)';
+    }
+
+    // Show hour label every 6 hours
+    if (h % 6 === 0) cell.setAttribute('data-label', h === 0 ? '12a' : h === 6 ? '6a' : h === 12 ? '12p' : '6p');
+
+    row.appendChild(cell);
+  }
+}
+
+// ─── FIND SPIKE MOMENTS ──────────────────────────────────────────────────────
+// A "spike" = any hour where AQI jumped >25 from the previous hour AND is above 100
+function findSpikes(hourlyData) {
+  const spikes = [];
+  for (let i = 1; i < hourlyData.length; i++) {
+    const prev = hourlyData[i - 1], curr = hourlyData[i];
+    const jump = curr.aqi - prev.aqi;
+    if (curr.aqi > 100 && jump > 20) {
+      spikes.push({ hour: curr.hour, aqi: curr.aqi, jump, label: aqiLabel(curr.aqi) });
+    }
+  }
+  // Also flag the absolute peak hour if it's above 100 and not already in spikes
+  const peak = hourlyData.reduce((a, b) => b.aqi > a.aqi ? b : a, hourlyData[0]);
+  if (peak.aqi > 100 && !spikes.find(s => s.hour === peak.hour)) {
+    spikes.push({ hour: peak.hour, aqi: peak.aqi, jump: null, label: aqiLabel(peak.aqi), isPeak: true });
+  }
+  return spikes.sort((a, b) => b.aqi - a.aqi).slice(0, 4);
+}
+
+// ─── RENDER SPIKE FEED ───────────────────────────────────────────────────────
+function renderSpikes(spikes) {
+  const feed  = document.getElementById('spike-feed');
+  const badge = document.getElementById('spike-count');
+  badge.textContent = `${spikes.length} spike${spikes.length !== 1 ? 's' : ''}`;
+
+  if (!spikes.length) {
+    feed.innerHTML = `
+      <div class="spike-card px-4 py-3 flex items-center gap-3" style="border-color:rgba(0,255,136,0.15)">
+        <div class="w-8 h-8 rounded-full flex items-center justify-center" style="background:rgba(0,255,136,0.1); font-size:14px;">✅</div>
+        <div>
+          <p class="text-sm" style="color:var(--neon-green)">No dangerous spikes today</p>
+          <p class="text-xs opacity-40">Air quality has been stable</p>
+        </div>
+      </div>`;
+    return;
+  }
+
+  feed.innerHTML = spikes.map(s => {
+    const color  = aqiColor(s.aqi);
+    const timeStr = `${String(s.hour).padStart(2,'0')}:00`;
+    const jumpStr = s.jump ? `↑${s.jump} from prev hour` : 'Daily peak';
+    return `
+      <div class="spike-card px-4 py-3 flex items-center gap-3" style="border-color:${color}33">
+        <div class="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
+             style="background:${color}15; font-size:13px;">⚠️</div>
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center justify-between">
+            <p class="text-sm font-semibold" style="color:${color}">AQI ${s.aqi} — ${s.label}</p>
+            <span class="font-orbitron" style="font-size:10px; color:${color}; opacity:0.7;">${timeStr}</span>
+          </div>
+          <p class="text-xs opacity-40 truncate">${jumpStr} · Limit outdoor activity</p>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+// ─── HEALTH ADVICE ───────────────────────────────────────────────────────────
+function renderAdvice(liveAqi, hourlyData, score) {
+  const advice = [];
+  const badHours  = hourlyData.filter(d => d.aqi > 100);
+  const peak      = hourlyData.length ? Math.max(...hourlyData.map(d => d.aqi)) : 0;
+  const currentH  = new Date().getHours();
+
+  if (score >= 75)  advice.push({ icon:'✅', text:'Overall air quality today is favourable for lung health.', color:'var(--neon-green)' });
+  if (score < 50)   advice.push({ icon:'⚠️', text:'Today\'s exposure has been above safe thresholds. Rest and avoid further outdoor activity.', color:'var(--neon-orange)' });
+  if (peak > 150)   advice.push({ icon:'😷', text:`Peak AQI of ${peak} reached today — N95 mask recommended during outdoor trips.`, color:'var(--neon-red)' });
+  if (badHours.length >= 4) advice.push({ icon:'🏠', text:`${badHours.length} hours of unhealthy air today — prefer indoor activities.`, color:'var(--neon-orange)' });
+
+  // Time-of-day tip
+  if (currentH >= 6 && currentH <= 9)  advice.push({ icon:'🚴', text:'Morning rush hour — AQI typically peaks now. Avoid heavy exercise outdoors.', color:'var(--neon-yellow)' });
+  if (currentH >= 18 && currentH <= 20) advice.push({ icon:'🌆', text:'Evening traffic peak — AQI elevated. Walk on low-traffic routes if possible.', color:'var(--neon-yellow)' });
+  if (currentH >= 22 || currentH <= 5)  advice.push({ icon:'🌙', text:'Night air is usually cleanest. Window ventilation recommended.', color:'var(--neon-green)' });
+
+  // Always add a water tip
+  advice.push({ icon:'💧', text:'Stay hydrated — water helps your respiratory tract flush out fine particles.', color:'rgba(0,212,255,0.8)' });
+
+  const list = document.getElementById('advice-list');
+  list.innerHTML = advice.map(a => `
+    <div class="flex items-start gap-2 text-xs leading-relaxed">
+      <span class="flex-shrink-0 mt-0.5">${a.icon}</span>
+      <span style="color:${a.color}; opacity:0.85;">${a.text}</span>
+    </div>`).join('');
+}
+
+// ─── UPDATE SCORE SECTION ────────────────────────────────────────────────────
+function updateScoreSection(score, liveAqi, hourlyData) {
+  const CIRCUMFERENCE = 2 * Math.PI * 46; // r=46
+  const ring   = document.getElementById('score-ring');
+  const numEl  = document.getElementById('score-number');
+  const color  = score >= 75 ? 'var(--neon-green)' : score >= 50 ? 'var(--neon-yellow)' : 'var(--neon-red)';
+
+  // Animate ring fill
+  ring.style.strokeDasharray  = CIRCUMFERENCE;
+  ring.style.strokeDashoffset = CIRCUMFERENCE * (1 - score / 100);
+  ring.style.stroke = color;
+  ring.style.filter = `drop-shadow(0 0 8px ${color})`;
+
+  numEl.textContent  = score;
+  numEl.style.color  = color;
+  numEl.style.textShadow = `0 0 12px ${color}`;
+
+  // Sub-bars
+  const badH = hourlyData.filter(d => d.aqi > 100).length;
+  const safeH = hourlyData.length - badH;
+
+  document.getElementById('score-aqi-val').textContent  = liveAqi;
+  document.getElementById('score-aqi-val').style.color  = aqiColor(liveAqi);
+  document.getElementById('score-aqi-bar').style.width  = Math.min(liveAqi / 300 * 100, 100) + '%';
+  document.getElementById('score-aqi-bar').style.background = aqiColor(liveAqi);
+
+  const riskPct = score < 50 ? 80 : score < 75 ? 50 : 20;
+  const riskLbl = score >= 75 ? 'Low' : score >= 50 ? 'Moderate' : 'High';
+  document.getElementById('score-risk-label').textContent = riskLbl;
+  document.getElementById('score-risk-label').style.color = color;
+  document.getElementById('score-risk-bar').style.width   = riskPct + '%';
+  document.getElementById('score-risk-bar').style.background = color;
+
+  const safePct = hourlyData.length ? safeH / hourlyData.length * 100 : 0;
+  document.getElementById('score-safe-hours').textContent = `${safeH}h / ${hourlyData.length}h`;
+  document.getElementById('score-safe-bar').style.width   = safePct + '%';
+
+  // Recommendation
+  const rec = document.getElementById('score-recommendation');
+  let advice = '';
+  if (score >= 75)     advice = '✅ Lung health looks good today. Safe for moderate outdoor activities.';
+  else if (score >= 50) advice = '⚠️ Moderate pollution exposure today. Sensitive individuals should limit outdoor time.';
+  else                  advice = '🚨 High pollution day. Stay indoors, use air purifiers, avoid strenuous activity.';
+  rec.textContent          = advice;
+  rec.style.borderColor    = color + '33';
+  rec.style.background     = color + '0d';
+  rec.style.color          = color;
+}
+
+// ─── UPDATE EXPOSURE SUMMARY ─────────────────────────────────────────────────
+function updateExposureSummary(hourlyData) {
+  if (!hourlyData.length) return;
+  const avg  = Math.round(hourlyData.reduce((s,d) => s + d.aqi, 0) / hourlyData.length);
+  const peak = Math.max(...hourlyData.map(d => d.aqi));
+  const bad  = hourlyData.filter(d => d.aqi > 100).length;
+
+  document.getElementById('exp-avg-aqi').textContent  = avg;
+  document.getElementById('exp-avg-aqi').style.color  = aqiColor(avg);
+  document.getElementById('exp-peak-aqi').textContent = peak;
+  document.getElementById('exp-peak-aqi').style.color = aqiColor(peak);
+  document.getElementById('exp-bad-hours').textContent = bad + 'h';
+  document.getElementById('exp-bad-hours').style.color = bad > 6 ? 'var(--neon-red)' : bad > 2 ? 'var(--neon-orange)' : 'var(--neon-green)';
+}
+
+// ─── MAIN ────────────────────────────────────────────────────────────────────
+async function initHealthPage() {
+  // Try GPS → Open-Meteo AQI
+  let liveAqi = null;
+
+  // Check localStorage first for a fast paint
+  try {
+    const cached = localStorage.getItem('oxtrace_last_aqi');
+    if (cached) liveAqi = parseInt(cached, 10);
+  } catch(_) {}
+
+  // Fetch fresh AQI
+  if ('geolocation' in navigator) {
+    navigator.geolocation.getCurrentPosition(async pos => {
+      const { latitude: lat, longitude: lon } = pos.coords;
+      try {
+        const res  = await fetch(`https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${lat}&longitude=${lon}&current=us_aqi`);
+        const data = await res.json();
+        liveAqi    = data?.current?.us_aqi ?? liveAqi ?? 80;
+        localStorage.setItem('oxtrace_last_aqi', liveAqi);
+      } catch(_) { liveAqi = liveAqi ?? 80; }
+      renderAll(liveAqi);
+    }, () => { renderAll(liveAqi ?? 80); },
+    { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 });
+  } else {
+    renderAll(liveAqi ?? 80);
+  }
+
+  // If no cache and geolocation is slow, render with placeholder after 1.5s
+  setTimeout(() => {
+    if (liveAqi === null) renderAll(80);
+  }, 1500);
+}
+
+function renderAll(liveAqi) {
+  const hourlyData = generateHourlyData(liveAqi);
+  const score      = computeLungScore(hourlyData, liveAqi);
+  const spikes     = findSpikes(hourlyData);
+
+  updateScoreSection(score, liveAqi, hourlyData);
+  updateExposureSummary(hourlyData);
+  drawTimeline(hourlyData);
+  drawHeatmap(hourlyData);
+  renderSpikes(spikes);
+  renderAdvice(liveAqi, hourlyData, score);
+
+  // logic.js integration
+  if (window.OxyTrace) window.OxyTrace.onAQIReady(liveAqi);
+
+  document.getElementById('fetch-time').textContent =
+    new Date().toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' });
+}
+
+// Redraw canvas on resize
+window.addEventListener('resize', () => {
+  const hourlyData = generateHourlyData(
+    parseInt(localStorage.getItem('oxtrace_last_aqi') || '80', 10)
+  );
+  drawTimeline(hourlyData);
+});
+
+initHealthPage();
+</script>
+</body>
+</html>
