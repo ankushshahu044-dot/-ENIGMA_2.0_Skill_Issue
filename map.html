@@ -904,6 +904,70 @@
     }
     .contour-tip::before { display: none; }
   </style>
+  <!-- ── MINIMAP MODE (when embedded as iframe in index.html) ── -->
+  <style>
+    /* Detect minimap mode via URL param ?minimap=1 */
+    body.minimap-mode #hud-header,
+    body.minimap-mode #legend,
+    body.minimap-mode #aqi-panel,
+    body.minimap-mode #safe-zone-card,
+    body.minimap-mode #route-exposure-wrap,
+    body.minimap-mode #status-bar,
+    body.minimap-mode #layer-toggle,
+    body.minimap-mode #theme-toggle,
+    body.minimap-mode #heatmap-toggle,
+    body.minimap-mode #heatmap-status,
+    body.minimap-mode #timeline-toggle,
+    body.minimap-mode #wind-toggle,
+    body.minimap-mode #timeline-panel,
+    body.minimap-mode #share-toast,
+    body.minimap-mode .leaflet-control-zoom,
+    body.minimap-mode .leaflet-control-attribution {
+      display: none !important;
+    }
+
+    /* Minimap overlay — cursor + safe zone distance only */
+    #minimap-overlay {
+      display: none;
+      position: fixed;
+      bottom: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 900;
+      background: rgba(7, 11, 18, 0.82);
+      border: 1px solid rgba(0, 232, 122, 0.3);
+      border-radius: 10px;
+      padding: 7px 14px;
+      backdrop-filter: blur(10px);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      letter-spacing: 0.06em;
+      color: #00e87a;
+      white-space: nowrap;
+      box-shadow: 0 0 14px rgba(0, 232, 122, 0.15);
+      pointer-events: none;
+    }
+    body.minimap-mode #minimap-overlay {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    #minimap-dist-dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: #00e87a;
+      box-shadow: 0 0 6px #00e87a;
+      flex-shrink: 0;
+      animation: mm-pulse 1.8s ease-in-out infinite;
+    }
+    @keyframes mm-pulse {
+      0%,100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.7); }
+    }
+    #minimap-dist-label { color: rgba(255,255,255,0.4); margin-right: 2px; }
+    #minimap-dist-val { color: #00e87a; font-weight: 600; }
+    #minimap-dir-val { color: rgba(0,232,122,0.6); font-size: 10px; }
+  </style>
 </head>
 <body>
 
@@ -915,6 +979,14 @@
 
 <!-- Map -->
 <div id="map"></div>
+
+<!-- Minimap overlay: shows only when embedded as iframe -->
+<div id="minimap-overlay">
+  <div id="minimap-dist-dot"></div>
+  <span id="minimap-dist-label">SAFE ZONE</span>
+  <span id="minimap-dist-val">—</span>
+  <span id="minimap-dir-val"></span>
+</div>
 
 <!-- Header HUD -->
 <div id="hud-header">
@@ -2609,7 +2681,59 @@
     window._sharedFallback = sharedLoc;
   }
 </script>
-<script>window.GEMINI_API_KEY = 'AIzaSyB4uYM4HLvso1-km90MlktcZVl1Y6s0Kas';</script>
+<script>
+  // ── MINIMAP MODE ─────────────────────────────────────────────────────────────
+  // Activated when map.html is embedded as an iframe with ?minimap=1
+  (function() {
+    const isMinimap = window.self !== window.top ||
+      new URLSearchParams(window.location.search).get('minimap') === '1';
+
+    if (isMinimap) {
+      document.body.classList.add('minimap-mode');
+
+      // Override drawSafeZoneOverlays to update minimap overlay
+      const _waitForDraw = setInterval(() => {
+        if (typeof drawSafeZoneOverlays !== 'undefined') {
+          clearInterval(_waitForDraw);
+          const _orig = drawSafeZoneOverlays;
+          window.drawSafeZoneOverlays = async function(lat, lng, userAqi, park) {
+            await _orig.apply(this, arguments);
+            if (park) {
+              const dist = haversine(lat, lng, park.lat, park.lng);
+              const distEl = document.getElementById('minimap-dist-val');
+              const dirEl  = document.getElementById('minimap-dir-val');
+              if (distEl) {
+                distEl.textContent = dist >= 1000
+                  ? (dist / 1000).toFixed(1) + ' km'
+                  : Math.round(dist) + ' m';
+              }
+              if (dirEl && typeof bearingLabel === 'function') {
+                const bearing = Math.atan2(park.lng - lng, park.lat - lat) * 180 / Math.PI;
+                dirEl.textContent = bearingLabel((bearing + 360) % 360);
+              }
+              // Send postMessage to parent (index.html)
+              try {
+                window.parent.postMessage({
+                  type: 'oxytrace-map',
+                  safePark: { name: park.name || 'Safe Zone', aqi: park.aqi, dist }
+                }, '*');
+              } catch(_) {}
+            }
+          };
+        }
+      }, 200);
+    }
+
+    // Helper: bearing to compass label (if not already defined)
+    if (typeof bearingLabel === 'undefined') {
+      window.bearingLabel = function(deg) {
+        const dirs = ['N','NE','E','SE','S','SW','W','NW'];
+        return dirs[Math.round(deg / 45) % 8];
+      };
+    }
+  })();
+</script>
+<script>window.GEMINI_API_KEY = 'YOUR_GEMINI_API_KEY';</script>
 <script src="chatbot.js"></script>
 </body>
 </html>
