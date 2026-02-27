@@ -1,13 +1,8 @@
 /**
- * logic.js — Adaptive Health Engine (AI Personalization)
- * ─────────────────────────────────────────────────────────────────────────────
- * NOW INCLUDES:
- * 1. Disease-Specific Advice Logic (Asthma vs COPD vs Healthy)
- * 2. Personalized Risk Scoring
- * 3. Custom Alert Generation
+ * logic.js — Adaptive Health Engine + Real Push Notifications
  */
 
-// ─── 1. ADVICE DATABASE (The Knowledge Base) ─────────────────────────────────
+// ─── ADVICE DATABASE ──────────────────────────────────────────────────────────
 const ADVICE_DB = {
   ASTHMA: {
     Critical: "🚨 ASTHMA EMERGENCY: Air is hazardous. Seal windows. Keep rescue inhaler ready immediately.",
@@ -27,7 +22,7 @@ const ADVICE_DB = {
     Moderate: "ℹ️ Take breaks if walking outside. Wear a mask if dusty.",
     Low:      "✅ Good air quality. Enjoy your walk."
   },
-  DEFAULT: { // For Healthy / Athletes
+  DEFAULT: {
     Critical: "🚨 HAZARDOUS: Do not exercise outside. Indoor cardio only.",
     High:     "⚠️ UNHEALTHY: Skip the run. Opt for the gym today.",
     Moderate: "ℹ️ Acceptable, but sensitive people should take it easy.",
@@ -35,7 +30,7 @@ const ADVICE_DB = {
   }
 };
 
-// ─── 2. PERSONA CLASSIFIER ───────────────────────────────────────────────────
+// ─── PERSONA CLASSIFIER ───────────────────────────────────────────────────────
 function detectPersona(conditions = [], age = 0) {
   const c = conditions.map(x => x.toLowerCase());
   if (c.includes('copd') || c.includes('emphysema')) return 'COPD';
@@ -44,46 +39,105 @@ function detectPersona(conditions = [], age = 0) {
   return 'DEFAULT';
 }
 
-// ─── 3. RISK CALCULATOR ──────────────────────────────────────────────────────
+// ─── RISK CALCULATOR ──────────────────────────────────────────────────────────
 const calculateHealthRisk = (aqi, userConditions = [], age = 0) => {
   if (typeof aqi !== 'number' || isNaN(aqi)) return { riskLevel: 'Unknown', riskScore: 0 };
-
   let score = aqi;
   const persona = detectPersona(userConditions, age);
-
-  // Apply "Vulnerability Multipliers"
-  if (persona === 'COPD') score *= 1.6;      // COPD is most sensitive
-  else if (persona === 'ASTHMA') score *= 1.4; // Asthma is reactive
-  else if (persona === 'ELDERLY') score *= 1.2; // Age factor
-
-  // Cap score at 500
+  if (persona === 'COPD')    score *= 1.6;
+  else if (persona === 'ASTHMA')  score *= 1.4;
+  else if (persona === 'ELDERLY') score *= 1.2;
   score = Math.min(Math.round(score), 500);
-
-  // Determine Tier
   let level = 'Low';
-  if (score >= 300) level = 'Critical';
+  if (score >= 300)      level = 'Critical';
   else if (score >= 150) level = 'High';
   else if (score >= 51)  level = 'Moderate';
-
-  // Get Custom Message
   const message = ADVICE_DB[persona][level];
-
   return { riskLevel: level, riskScore: score, message, persona };
 };
 
-// ─── 4. BROWSER NOTIFICATION SYSTEM ──────────────────────────────────────────
-const checkAlertStatus = (aqi, riskLevel, message) => {
-  if (typeof window === 'undefined' || !('Notification' in window)) return;
-  if (aqi <= 100) return; // Only alert if bad
+// ─── PUSH NOTIFICATION SETUP ──────────────────────────────────────────────────
+const VAPID_KEY = 'PASTE_YOUR_VAPID_KEY_HERE'; // ← from Step 1
 
-  const title = `OxyTrace: ${riskLevel} Alert`;
-  
-  if (Notification.permission === 'granted') {
-    new Notification(title, { body: message, icon: 'https://cdn-icons-png.flaticon.com/512/2964/2964063.png' });
+let _messaging = null;
+let _notifLastSent = 0;
+const NOTIF_COOLDOWN_MS = 10 * 60 * 1000; // max 1 notification per 10 mins
+
+async function setupPushNotifications() {
+  try {
+    // 1. Register service worker
+    if (!('serviceWorker' in navigator)) return;
+    const reg = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+    console.log('✅ Service Worker registered');
+
+    // 2. Request permission
+    const permission = await Notification.requestPermission();
+    if (permission !== 'granted') {
+      console.warn('🔕 Notification permission denied');
+      return;
+    }
+
+    // 3. Init Firebase Messaging
+    const { initializeApp, getApps } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js');
+    const { getMessaging, getToken } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging.js');
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyAvDsel_ZqQrqtCuMKBTDqQFVM_zP7VplQ",
+      authDomain: "oxytrace-b1010.firebaseapp.com",
+      projectId: "oxytrace-b1010",
+      storageBucket: "oxytrace-b1010.firebasestorage.app",
+      messagingSenderId: "535755454947",
+      appId: "1:535755454947:web:024254448bbf50061848d6"
+    };
+
+    const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
+    _messaging = getMessaging(app);
+
+    // 4. Get FCM token and save it
+    const token = await getToken(_messaging, {
+      vapidKey: VAPID_KEY,
+      serviceWorkerRegistration: reg
+    });
+
+    if (token) {
+      localStorage.setItem('oxy_fcm_token', token);
+      console.log('✅ FCM Token saved:', token.substring(0, 20) + '...');
+    }
+
+  } catch (err) {
+    console.warn('Push setup failed:', err.message);
   }
+}
+
+// ─── SEND NOTIFICATION ────────────────────────────────────────────────────────
+function sendNotification(title, body) {
+  const now = Date.now();
+  // Cooldown check — don't spam
+  if (now - _notifLastSent < NOTIF_COOLDOWN_MS) return;
+  _notifLastSent = now;
+
+  if (Notification.permission === 'granted') {
+    new Notification(title, {
+      body,
+      icon: 'https://cdn-icons-png.flaticon.com/512/2964/2964063.png',
+      badge: 'https://cdn-icons-png.flaticon.com/512/2964/2964063.png',
+      vibrate: [200, 100, 200],
+      tag: 'oxytrace-alert', // replaces previous notification instead of stacking
+      renotify: true
+    });
+  }
+}
+
+// ─── ALERT CHECKER ────────────────────────────────────────────────────────────
+const checkAlertStatus = (aqi, riskLevel, message) => {
+  if (typeof window === 'undefined') return;
+  if (aqi <= 100) return;
+
+  const title = `OxyTrace: ${riskLevel} Air Quality Alert`;
+  sendNotification(title, message);
 };
 
-// ─── 5. DATA MANAGER ─────────────────────────────────────────────────────────
+// ─── PROFILE READER ───────────────────────────────────────────────────────────
 const getUserProfile = () => {
   try {
     const raw = localStorage.getItem('oxtrace_health_profile');
@@ -92,25 +146,20 @@ const getUserProfile = () => {
   return { age: 0, conditions: [], name: 'User' };
 };
 
-// ─── 6. MAIN INTEGRATION ─────────────────────────────────────────────────────
+// ─── MAIN INTEGRATION ─────────────────────────────────────────────────────────
 const onAQIReady = (aqi) => {
   const profile = getUserProfile();
   const { riskLevel, riskScore, message, persona } = calculateHealthRisk(aqi, profile.conditions, profile.age);
 
-  // Send Browser Notification
   checkAlertStatus(aqi, riskLevel, message);
 
-  // Update UI (Alerts Tab)
   if (typeof document !== 'undefined') {
-    // Inject the alert into the feed
     const feed = document.getElementById('alert-feed');
     if (feed) {
       const card = document.createElement('div');
       card.className = "stat-card rounded-xl px-4 py-3 flex items-center gap-3 border-l-4";
-      // Color code the border based on risk
       const color = riskLevel === 'Critical' ? '#ff0000' : riskLevel === 'High' ? '#ff9500' : '#00ff88';
       card.style.borderLeftColor = color;
-      
       card.innerHTML = `
         <div class="flex-1">
           <div class="flex justify-between items-center mb-1">
@@ -126,5 +175,10 @@ const onAQIReady = (aqi) => {
   }
 };
 
-// Export
+// ─── BOOT ─────────────────────────────────────────────────────────────────────
+// Ask for notification permission as soon as page loads
+window.addEventListener('DOMContentLoaded', () => {
+  setupPushNotifications();
+});
+
 window.OxyTrace = { calculateHealthRisk, getUserProfile, onAQIReady };
