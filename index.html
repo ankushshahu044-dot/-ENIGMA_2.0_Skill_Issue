@@ -380,7 +380,7 @@
       </a>
     </div>
     <div class="rounded-2xl overflow-hidden" style="height:260px;position:relative;">
-      <iframe id="map-iframe" src="map.html"
+      <iframe id="map-iframe" src="map.html?minimap=1"
         style="width:100%;height:100%;border:none;display:block;border-radius:16px;"
         allow="geolocation" loading="lazy"></iframe>
       <div style="position:absolute;inset:0;border-radius:16px;border:1px solid rgba(0,212,255,.22);pointer-events:none;z-index:2;"></div>
@@ -493,7 +493,7 @@
     <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:20px;">
       <div class="p-info-row">
         <div class="p-label">Email Address</div>
-        <div class="p-value" id="p-email">user@oxytrace.com</div>
+        <div class="p-value" id="p-email"><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="4035332532002f383934322123256e232f2d">[email&#160;protected]</a></div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
         <div class="p-info-row">
@@ -588,7 +588,7 @@
   </div>
 </div>
 
-<script src="logic.js"></script>
+<script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script src="logic.js"></script>
 <script src="api.js"></script>
 <script src="personalization.js"></script>
 <script>
@@ -826,7 +826,7 @@ window.addEventListener('message', e => {
 // ── Boot ──────────────────────────────────────────────────────────────────────
 window.OxyTraceAPI.init();
 </script>
-<script>window.GEMINI_API_KEY = 'AIzaSyB4uYM4HLvso1-km90MlktcZVl1Y6s0Kas';</script>
+<script>window.GEMINI_API_KEY = 'YOUR_GEMINI_API_KEY';</script>
 <script src="chatbot.js"></script>
 </body>
 </html>
@@ -957,13 +957,4 @@ function initPanelNotifToggle() {
 }
 
 function panelLogout() {
-  if (confirm('Are you sure you want to sign out?')) {
-    localStorage.removeItem('oxy_logged_in');
-    window.location.href = 'signup.html';
-  }
-}
-
-document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') closeProfilePanel();
-});
-</script>
+  if (confirm('Are you sure
